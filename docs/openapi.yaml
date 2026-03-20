@@ -1,0 +1,3679 @@
+openapi: 3.0.3
+info:
+  title: KeepNum API
+  version: 1.0.0
+  description: >
+    KeepNum — park phone numbers, forward calls/SMS, manage voicemails,
+    and handle billing through a single REST API backed by AWS API Gateway,
+    Lambda, Aurora Postgres, and DynamoDB.
+  contact:
+    name: KeepNum Engineering
+    email: engineering@keepnum.com
+  license:
+    name: Proprietary
+
+servers:
+  - url: https://api.keepnum.com/{environment}
+    description: KeepNum API
+    variables:
+      environment:
+        default: prod
+        enum:
+          - prod
+          - staging
+        description: Deployment environment
+
+tags:
+  - name: Auth
+    description: Registration, login, token refresh, and account deletion
+  - name: Numbers
+    description: Phone number search, provisioning, forwarding rules, caller rules, and block lists
+  - name: Voicemails
+    description: Voicemail listing and retrieval
+  - name: Logs
+    description: Call and SMS log queries
+  - name: Downloads
+    description: Pre-signed download URLs for voicemails and SMS exports
+  - name: Billing
+    description: Payment sessions, subscriptions, and invoices
+  - name: Admin
+    description: User management, packages, feature flags, and audit log (admin-only)
+  - name: Public
+    description: Publicly accessible endpoints (no authentication)
+  - name: Webhooks
+    description: Inbound webhooks from Telnyx and Adyen (WAF-allowlisted, no JWT auth)
+  - name: Virtual Numbers
+    description: Virtual number provisioning, management, and outbound calling
+  - name: IVR
+    description: IVR auto-attendant menu management
+  - name: Auto Reply
+    description: Auto-reply SMS template management
+  - name: Unified Inbox
+    description: Aggregated feed of voicemails, missed calls, and SMS
+  - name: Privacy Scan
+    description: Data broker privacy scanning
+  - name: Caller ID
+    description: Reverse phone number lookup
+  - name: Conference
+    description: Conference bridge creation and participant management
+  - name: Notifications
+    description: Push notification device registration and settings
+  - name: Greetings Marketplace
+    description: Browse and apply marketplace greetings
+  - name: DND
+    description: Do Not Disturb schedule management
+  - name: Contacts
+    description: Contact import and smart routing tier management
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Cognito JWT access token passed in the Authorization header
+
+  schemas:
+    # ── Error ────────────────────────────────────────────────────────────────
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string
+          example: Something went wrong
+
+    # ── Auth ─────────────────────────────────────────────────────────────────
+    RegisterRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email:
+          type: string
+          format: email
+          example: user@example.com
+        password:
+          type: string
+          minLength: 8
+          example: P@ssw0rd!
+
+    LoginRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email:
+          type: string
+          format: email
+          example: user@example.com
+        password:
+          type: string
+          example: P@ssw0rd!
+
+    LoginResponse:
+      type: object
+      properties:
+        accessToken:
+          type: string
+          example: eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9...
+        refreshToken:
+          type: string
+          example: eyJjdHkiOiJKV1QiLCJlbmMiOiJBMjU2R0NNIi...
+
+    RefreshRequest:
+      type: object
+      required: [refreshToken]
+      properties:
+        refreshToken:
+          type: string
+          example: eyJjdHkiOiJKV1QiLCJlbmMiOiJBMjU2R0NNIi...
+
+    RefreshResponse:
+      type: object
+      properties:
+        accessToken:
+          type: string
+          example: eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9...
+
+    MessageResponse:
+      type: object
+      properties:
+        message:
+          type: string
+          example: Operation completed successfully
+
+    # ── Numbers ────────────────────────────────────────────────────────────
+    NumberType:
+      type: string
+      enum: [local, toll-free, mobile]
+
+    NumberStatus:
+      type: string
+      enum: [active, released]
+
+    RetentionPolicy:
+      type: string
+      enum: ['30d', '60d', '90d', forever]
+
+    CallerRuleAction:
+      type: string
+      enum: [voicemail, disconnect, forward, custom_greeting]
+
+    GreetingType:
+      type: string
+      enum: [default, smart_known, smart_unknown]
+
+    AvailableNumber:
+      type: object
+      properties:
+        telnyxNumberId:
+          type: string
+          example: num_abc123
+        phoneNumber:
+          type: string
+          example: '+12025551234'
+        numberType:
+          $ref: '#/components/schemas/NumberType'
+        monthlyCostCents:
+          type: integer
+          example: 100
+        available:
+          type: boolean
+          example: true
+
+    ParkedNumber:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: 550e8400-e29b-41d4-a716-446655440000
+        user_id:
+          type: string
+          format: uuid
+        telnyx_number_id:
+          type: string
+          example: num_abc123
+        phone_number:
+          type: string
+          example: '+12025551234'
+        status:
+          $ref: '#/components/schemas/NumberStatus'
+        retention_policy:
+          $ref: '#/components/schemas/RetentionPolicy'
+        created_at:
+          type: string
+          format: date-time
+        released_at:
+          type: string
+          format: date-time
+          nullable: true
+
+    ProvisionNumberRequest:
+      type: object
+      required: [telnyxNumberId]
+      properties:
+        telnyxNumberId:
+          type: string
+          example: num_abc123
+
+    ForwardingRule:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        parked_number_id:
+          type: string
+          format: uuid
+        destination:
+          type: string
+          example: '+14155559876'
+        enabled:
+          type: boolean
+          example: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    SetForwardingRuleRequest:
+      type: object
+      required: [destination, enabled]
+      properties:
+        destination:
+          type: string
+          description: E.164 phone number
+          example: '+14155559876'
+        enabled:
+          type: boolean
+          example: true
+
+    SetRetentionRequest:
+      type: object
+      required: [policy]
+      properties:
+        policy:
+          $ref: '#/components/schemas/RetentionPolicy'
+
+    SetGreetingRequest:
+      type: object
+      required: [greetingType]
+      properties:
+        greetingType:
+          $ref: '#/components/schemas/GreetingType'
+        audioUrl:
+          type: string
+          format: uri
+          example: https://storage.telnyx.com/audio/greeting.wav
+        text:
+          type: string
+          example: Hi, please leave a message after the beep.
+
+    CallerRuleActionData:
+      type: object
+      nullable: true
+      properties:
+        forwardTo:
+          type: string
+          example: '+14155559876'
+        greetingId:
+          type: string
+          format: uuid
+
+    CallerRule:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        parked_number_id:
+          type: string
+          format: uuid
+        caller_id:
+          type: string
+          example: '+12025550001'
+        action:
+          $ref: '#/components/schemas/CallerRuleAction'
+        action_data:
+          $ref: '#/components/schemas/CallerRuleActionData'
+        created_at:
+          type: string
+          format: date-time
+
+    AddCallerRuleRequest:
+      type: object
+      required: [callerId, action]
+      properties:
+        callerId:
+          type: string
+          example: '+12025550001'
+        action:
+          $ref: '#/components/schemas/CallerRuleAction'
+        actionData:
+          $ref: '#/components/schemas/CallerRuleActionData'
+
+    BlockListEntry:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        parked_number_id:
+          type: string
+          format: uuid
+        caller_id:
+          type: string
+          example: '+12025550099'
+        created_at:
+          type: string
+          format: date-time
+
+    AddBlockListRequest:
+      type: object
+      required: [callerId]
+      properties:
+        callerId:
+          type: string
+          example: '+12025550099'
+
+    # ── Voicemails ─────────────────────────────────────────────────────────
+    TranscriptionStatus:
+      type: string
+      enum: [pending, complete, failed]
+
+    Voicemail:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        parked_number_id:
+          type: string
+          format: uuid
+        caller_id:
+          type: string
+          nullable: true
+          example: '+12025550001'
+        duration_seconds:
+          type: integer
+          nullable: true
+          example: 32
+        storage_key:
+          type: string
+          example: voicemails/usr123/num456/vm789.wav
+        transcription:
+          type: string
+          nullable: true
+          example: Hi, this is John. Please call me back.
+        transcription_status:
+          $ref: '#/components/schemas/TranscriptionStatus'
+        received_at:
+          type: string
+          format: date-time
+        deleted_at:
+          type: string
+          format: date-time
+          nullable: true
+
+    # ── SMS ──────────────────────────────────────────────────────────────────
+    MessageDirection:
+      type: string
+      enum: [inbound, outbound]
+
+    SmsMessage:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        parked_number_id:
+          type: string
+          format: uuid
+        direction:
+          $ref: '#/components/schemas/MessageDirection'
+        sender:
+          type: string
+          example: '+12025550001'
+        recipient:
+          type: string
+          example: '+14155559876'
+        body:
+          type: string
+          nullable: true
+          example: Hello from KeepNum
+        media_keys:
+          type: array
+          items:
+            type: string
+          example: ['sms-media/usr123/num456/msg789/image.jpg']
+        received_at:
+          type: string
+          format: date-time
+        deleted_at:
+          type: string
+          format: date-time
+          nullable: true
+
+    # ── Greeting ─────────────────────────────────────────────────────────────
+    Greeting:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        parked_number_id:
+          type: string
+          format: uuid
+        greeting_type:
+          $ref: '#/components/schemas/GreetingType'
+        audio_key:
+          type: string
+          nullable: true
+        tts_text:
+          type: string
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+
+    # ── Add-ons ──────────────────────────────────────────────────────────────
+    AddOnType:
+      type: string
+      enum: [spam_filter, call_screening]
+
+    AddOn:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        user_id:
+          type: string
+          format: uuid
+        add_on_type:
+          $ref: '#/components/schemas/AddOnType'
+        enabled:
+          type: boolean
+        updated_at:
+          type: string
+          format: date-time
+
+    # ── Packages & Feature Flags ────────────────────────────────────────────
+    FlagValue:
+      oneOf:
+        - type: boolean
+        - type: number
+      example: true
+
+    Package:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+          example: Pro Plan
+        description:
+          type: string
+          nullable: true
+          example: Best for power users
+        price_monthly_cents:
+          type: integer
+          example: 999
+        per_number_price_cents:
+          type: integer
+          nullable: true
+          example: 200
+        publicly_visible:
+          type: boolean
+          example: true
+        sort_order:
+          type: integer
+          example: 1
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        deleted_at:
+          type: string
+          format: date-time
+          nullable: true
+
+    CreatePackageRequest:
+      type: object
+      required: [name, priceMonthly, publiclyVisible, sortOrder]
+      properties:
+        name:
+          type: string
+          example: Pro Plan
+        description:
+          type: string
+          example: Best for power users
+        priceMonthly:
+          type: integer
+          description: Monthly price in cents
+          example: 999
+        perNumberPrice:
+          type: integer
+          description: Per-number price in cents
+          example: 200
+        publiclyVisible:
+          type: boolean
+          example: true
+        sortOrder:
+          type: integer
+          example: 1
+        flags:
+          type: object
+          additionalProperties:
+            $ref: '#/components/schemas/FlagValue'
+
+    FeatureFlag:
+      type: object
+      properties:
+        flag_name:
+          type: string
+          example: max_numbers
+        value:
+          $ref: '#/components/schemas/FlagValue'
+        updated_at:
+          type: string
+          format: date-time
+        updated_by:
+          type: string
+          nullable: true
+
+    PackageFlag:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        package_id:
+          type: string
+          format: uuid
+        flag_name:
+          type: string
+        value:
+          $ref: '#/components/schemas/FlagValue'
+
+    UserFeatureOverride:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        user_id:
+          type: string
+          format: uuid
+        flag_name:
+          type: string
+        value:
+          $ref: '#/components/schemas/FlagValue'
+        set_by:
+          type: string
+        updated_at:
+          type: string
+          format: date-time
+
+    # ── Billing ───────────────────────────────────────────────────────────
+    SubscriptionStatus:
+      type: string
+      enum: [active, cancelled, past_due, trialing]
+
+    InvoiceStatus:
+      type: string
+      enum: [pending, paid, failed, refunded, chargeback]
+
+    Subscription:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        user_id:
+          type: string
+          format: uuid
+        package_id:
+          type: string
+          format: uuid
+        status:
+          $ref: '#/components/schemas/SubscriptionStatus'
+        adyen_shopper_ref:
+          type: string
+          nullable: true
+        current_period_start:
+          type: string
+          format: date-time
+        current_period_end:
+          type: string
+          format: date-time
+        cancel_at_period_end:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    PaymentMethod:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        user_id:
+          type: string
+          format: uuid
+        adyen_token:
+          type: string
+        card_last_four:
+          type: string
+          nullable: true
+          example: '4242'
+        card_brand:
+          type: string
+          nullable: true
+          example: visa
+        expiry_month:
+          type: integer
+          nullable: true
+          example: 12
+        expiry_year:
+          type: integer
+          nullable: true
+          example: 2026
+        is_default:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+
+    Invoice:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        user_id:
+          type: string
+          format: uuid
+        subscription_id:
+          type: string
+          format: uuid
+        amount_cents:
+          type: integer
+          example: 999
+        currency:
+          type: string
+          example: USD
+        status:
+          $ref: '#/components/schemas/InvoiceStatus'
+        adyen_psp_ref:
+          type: string
+          nullable: true
+        period_start:
+          type: string
+          format: date-time
+        period_end:
+          type: string
+          format: date-time
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    CreateSessionResponse:
+      type: object
+      properties:
+        sessionId:
+          type: string
+          example: sess_abc123
+        sessionData:
+          type: string
+          example: eyJhbGciOiJIUzI1NiJ9...
+
+    CreateSubscriptionRequest:
+      type: object
+      required: [packageId]
+      properties:
+        packageId:
+          type: string
+          format: uuid
+
+    UpdateSubscriptionRequest:
+      type: object
+      required: [packageId]
+      properties:
+        packageId:
+          type: string
+          format: uuid
+
+    # ── Admin ────────────────────────────────────────────────────────────
+    AdminActionType:
+      type: string
+      enum:
+        - disable_user
+        - enable_user
+        - change_package
+        - set_flag_override
+        - create_package
+        - update_package
+        - delete_package
+        - update_feature_flag_default
+
+    AdminTargetType:
+      type: string
+      enum: [user, package, feature_flag]
+
+    AdminAuditLog:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        admin_sub:
+          type: string
+        action:
+          $ref: '#/components/schemas/AdminActionType'
+        target_type:
+          $ref: '#/components/schemas/AdminTargetType'
+        target_id:
+          type: string
+        payload:
+          type: object
+          nullable: true
+          additionalProperties: true
+        created_at:
+          type: string
+          format: date-time
+
+    User:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        cognito_id:
+          type: string
+        email:
+          type: string
+          format: email
+        created_at:
+          type: string
+          format: date-time
+        deleted_at:
+          type: string
+          format: date-time
+          nullable: true
+
+    SetUserStatusRequest:
+      type: object
+      required: [enabled]
+      properties:
+        enabled:
+          type: boolean
+          example: false
+
+    SetUserPackageRequest:
+      type: object
+      required: [packageId, effectiveImmediately]
+      properties:
+        packageId:
+          type: string
+          format: uuid
+        effectiveImmediately:
+          type: boolean
+          example: true
+
+    SetUserFeatureFlagsRequest:
+      type: object
+      additionalProperties:
+        $ref: '#/components/schemas/FlagValue'
+      example:
+        max_numbers: 10
+        spam_filter_enabled: true
+
+    FeatureFlagDefaults:
+      type: object
+      additionalProperties:
+        $ref: '#/components/schemas/FlagValue'
+      example:
+        max_numbers: 5
+        spam_filter_enabled: false
+
+    # ── Logs (DynamoDB) ──────────────────────────────────────────────────────
+    CallDisposition:
+      type: string
+      enum: [answered, voicemail, blocked, screened, forwarded]
+
+    CallLogItem:
+      type: object
+      properties:
+        callId:
+          type: string
+        callerId:
+          type: string
+          example: '+12025550001'
+        direction:
+          type: string
+          enum: [inbound, outbound]
+        duration:
+          type: integer
+          example: 45
+        disposition:
+          $ref: '#/components/schemas/CallDisposition'
+        spamScore:
+          type: number
+          nullable: true
+          example: 0.85
+
+    SmsLogStatus:
+      type: string
+      enum: [delivered, failed, blocked, spam]
+
+    SmsLogItem:
+      type: object
+      properties:
+        messageId:
+          type: string
+        sender:
+          type: string
+          example: '+12025550001'
+        recipient:
+          type: string
+          example: '+14155559876'
+        status:
+          $ref: '#/components/schemas/SmsLogStatus'
+        direction:
+          type: string
+          enum: [inbound, outbound]
+
+    # ── Downloads ────────────────────────────────────────────────────────────
+    DownloadUrlResponse:
+      type: object
+      properties:
+        url:
+          type: string
+          format: uri
+          example: https://storage.telnyx.com/presigned/voicemail.wav?token=abc
+        expiresAt:
+          type: string
+          format: date-time
+
+    # ── Webhooks ─────────────────────────────────────────────────────────────
+    TelnyxCallWebhookPayload:
+      type: object
+      description: Telnyx call control webhook payload
+      properties:
+        data:
+          type: object
+          properties:
+            event_type:
+              type: string
+              example: call.initiated
+            payload:
+              type: object
+              properties:
+                call_control_id:
+                  type: string
+                call_leg_id:
+                  type: string
+                from:
+                  type: string
+                  example: '+12025550001'
+                to:
+                  type: string
+                  example: '+14155559876'
+
+    TelnyxSmsWebhookPayload:
+      type: object
+      description: Telnyx messaging webhook payload
+      properties:
+        data:
+          type: object
+          properties:
+            event_type:
+              type: string
+              example: message.received
+            payload:
+              type: object
+              properties:
+                from:
+                  type: object
+                  properties:
+                    phone_number:
+                      type: string
+                      example: '+12025550001'
+                to:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      phone_number:
+                        type: string
+                text:
+                  type: string
+                media:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      url:
+                        type: string
+                        format: uri
+
+    TelnyxVoicemailWebhookPayload:
+      type: object
+      description: Telnyx recording webhook payload
+      properties:
+        data:
+          type: object
+          properties:
+            event_type:
+              type: string
+              example: recording.completed
+            payload:
+              type: object
+              properties:
+                recording_urls:
+                  type: object
+                  properties:
+                    wav:
+                      type: string
+                      format: uri
+                call_leg_id:
+                  type: string
+                from:
+                  type: string
+                to:
+                  type: string
+
+    AdyenWebhookPayload:
+      type: object
+      description: Adyen notification webhook payload
+      properties:
+        notificationItems:
+          type: array
+          items:
+            type: object
+            properties:
+              NotificationRequestItem:
+                type: object
+                properties:
+                  eventCode:
+                    type: string
+                    enum: [AUTHORISATION, CANCELLATION, REFUND, CHARGEBACK]
+                  success:
+                    type: string
+                    enum: ['true', 'false']
+                  pspReference:
+                    type: string
+                  merchantReference:
+                    type: string
+                  amount:
+                    type: object
+                    properties:
+                      value:
+                        type: integer
+                      currency:
+                        type: string
+                  additionalData:
+                    type: object
+                    properties:
+                      hmacSignature:
+                        type: string
+
+    WebhookAck:
+      type: object
+      properties:
+        message:
+          type: string
+          example: Event acknowledged
+
+  responses:
+    BadRequest:
+      description: Bad request — invalid or missing parameters
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: Invalid request body
+    Unauthorized:
+      description: Unauthorized — missing or invalid JWT
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: Unauthorized
+    Forbidden:
+      description: Forbidden — insufficient permissions
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: Forbidden
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: Not found
+    Conflict:
+      description: Conflict — resource already exists or constraint violation
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: Resource already exists
+    InternalError:
+      description: Internal server error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: Internal server error
+    BadGateway:
+      description: Bad gateway — upstream provider failure
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: Upstream provider error
+    ServiceUnavailable:
+      description: Service unavailable — upstream provider temporarily unreachable
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: Service temporarily unavailable
+
+security:
+  - bearerAuth: []
+
+paths:
+  # ═══════════════════════════════════════════════════════════════════════════
+  # Auth routes
+  # ═══════════════════════════════════════════════════════════════════════════
+  /auth/register:
+    post:
+      tags: [Auth]
+      summary: Register a new user
+      description: Creates a Cognito user and an Aurora users record.
+      operationId: registerUser
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+            example:
+              email: user@example.com
+              password: P@ssw0rd!
+      responses:
+        '201':
+          description: User registered successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+              example:
+                message: User registered successfully
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /auth/login:
+    post:
+      tags: [Auth]
+      summary: Log in with email and password
+      description: >
+        Authenticates via Cognito USER_PASSWORD_AUTH flow.
+        Error messages never reveal which field was incorrect.
+      operationId: loginUser
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+            example:
+              email: user@example.com
+              password: P@ssw0rd!
+      responses:
+        '200':
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginResponse'
+              example:
+                accessToken: eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9...
+                refreshToken: eyJjdHkiOiJKV1QiLCJlbmMiOiJBMjU2R0NNIi...
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /auth/refresh:
+    post:
+      tags: [Auth]
+      summary: Refresh access token
+      description: Uses Cognito REFRESH_TOKEN_AUTH flow to obtain a new access token.
+      operationId: refreshToken
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RefreshRequest'
+            example:
+              refreshToken: eyJjdHkiOiJKV1QiLCJlbmMiOiJBMjU2R0NNIi...
+      responses:
+        '200':
+          description: Token refreshed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RefreshResponse'
+              example:
+                accessToken: eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9...
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /auth/account:
+    delete:
+      tags: [Auth]
+      summary: Delete user account
+      description: >
+        Marks the user as deleted in Aurora, releases all active parked numbers
+        via Telnyx, and disables the Cognito user.
+      operationId: deleteAccount
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Account deleted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+              example:
+                message: Account deleted
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # Number routes
+  # ═══════════════════════════════════════════════════════════════════════════
+  /numbers/search:
+    get:
+      tags: [Numbers]
+      summary: Search available phone numbers
+      description: Queries the Telnyx available_phone_numbers API with optional filters.
+      operationId: searchNumbers
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: areaCode
+          in: query
+          schema:
+            type: string
+          example: '202'
+        - name: region
+          in: query
+          schema:
+            type: string
+          example: US
+        - name: country
+          in: query
+          schema:
+            type: string
+          example: US
+        - name: type
+          in: query
+          schema:
+            $ref: '#/components/schemas/NumberType'
+        - name: pattern
+          in: query
+          schema:
+            type: string
+          example: '555'
+      responses:
+        '200':
+          description: List of available numbers
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AvailableNumber'
+              example:
+                - telnyxNumberId: num_abc123
+                  phoneNumber: '+12025551234'
+                  numberType: local
+                  monthlyCostCents: 100
+                  available: true
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+
+  /numbers:
+    post:
+      tags: [Numbers]
+      summary: Provision a phone number
+      description: >
+        Orders the number via Telnyx and creates an Aurora parked_numbers record.
+        Rolls back the transaction if Telnyx provisioning fails.
+      operationId: provisionNumber
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProvisionNumberRequest'
+            example:
+              telnyxNumberId: num_abc123
+      responses:
+        '201':
+          description: Number provisioned
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ParkedNumber'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '502':
+          $ref: '#/components/responses/BadGateway'
+    get:
+      tags: [Numbers]
+      summary: List user's parked numbers
+      description: Returns all active parked numbers belonging to the authenticated user.
+      operationId: listNumbers
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: List of parked numbers
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ParkedNumber'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /numbers/{id}:
+    delete:
+      tags: [Numbers]
+      summary: Release a parked number
+      description: Releases the number via Telnyx and marks it as released in Aurora.
+      operationId: releaseNumber
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Number released
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+              example:
+                message: Number released
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /numbers/{id}/forwarding-rule:
+    put:
+      tags: [Numbers]
+      summary: Set forwarding rule
+      description: >
+        Upserts a single forwarding rule for the parked number.
+        Only one active forwarding rule per number is allowed.
+      operationId: setForwardingRule
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SetForwardingRuleRequest'
+            example:
+              destination: '+14155559876'
+              enabled: true
+      responses:
+        '200':
+          description: Forwarding rule updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ForwardingRule'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /numbers/{id}/retention:
+    put:
+      tags: [Numbers]
+      summary: Set retention policy
+      description: Updates the retention policy for voicemails and SMS on this number.
+      operationId: setRetentionPolicy
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SetRetentionRequest'
+            example:
+              policy: 90d
+      responses:
+        '200':
+          description: Retention policy updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+              example:
+                message: Retention policy updated
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /numbers/{id}/greeting:
+    put:
+      tags: [Numbers]
+      summary: Set greeting
+      description: Sets the voicemail greeting for this parked number.
+      operationId: setGreeting
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SetGreetingRequest'
+            example:
+              greetingType: default
+              text: Hi, please leave a message after the beep.
+      responses:
+        '200':
+          description: Greeting updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Greeting'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /numbers/{id}/caller-rules:
+    post:
+      tags: [Numbers]
+      summary: Add a caller rule
+      description: Creates a per-caller routing rule for the parked number.
+      operationId: addCallerRule
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AddCallerRuleRequest'
+            example:
+              callerId: '+12025550001'
+              action: voicemail
+      responses:
+        '201':
+          description: Caller rule created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CallerRule'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /numbers/{id}/caller-rules/{ruleId}:
+    delete:
+      tags: [Numbers]
+      summary: Delete a caller rule
+      description: Removes a per-caller routing rule.
+      operationId: deleteCallerRule
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: ruleId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Caller rule deleted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+              example:
+                message: Caller rule deleted
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /numbers/{id}/blocklist:
+    post:
+      tags: [Numbers]
+      summary: Add to block list
+      description: Adds a caller ID to the block list for this parked number.
+      operationId: addToBlockList
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AddBlockListRequest'
+            example:
+              callerId: '+12025550099'
+      responses:
+        '201':
+          description: Block list entry created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BlockListEntry'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /numbers/{id}/blocklist/{callerId}:
+    delete:
+      tags: [Numbers]
+      summary: Remove from block list
+      description: Removes a caller ID from the block list.
+      operationId: removeFromBlockList
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: callerId
+          in: path
+          required: true
+          schema:
+            type: string
+          description: URL-encoded E.164 caller ID
+      responses:
+        '200':
+          description: Block list entry removed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+              example:
+                message: Block list entry removed
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # Voicemail routes
+  # ═══════════════════════════════════════════════════════════════════════════
+  /voicemails:
+    get:
+      tags: [Voicemails]
+      summary: List voicemails
+      description: >
+        Returns voicemails belonging to the authenticated user's parked numbers.
+        Only non-deleted voicemails are returned.
+      operationId: listVoicemails
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: List of voicemails
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Voicemail'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /voicemails/{id}:
+    get:
+      tags: [Voicemails]
+      summary: Get a single voicemail
+      description: Returns a specific voicemail by ID if it belongs to the authenticated user.
+      operationId: getVoicemail
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Voicemail details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Voicemail'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # Log routes
+  # ═══════════════════════════════════════════════════════════════════════════
+  /logs/calls:
+    get:
+      tags: [Logs]
+      summary: Query call logs
+      description: Returns call log entries from DynamoDB with optional filters.
+      operationId: getCallLogs
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: numberId
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: from
+          in: query
+          description: Start of date range (ISO 8601)
+          schema:
+            type: string
+            format: date-time
+        - name: to
+          in: query
+          description: End of date range (ISO 8601)
+          schema:
+            type: string
+            format: date-time
+        - name: callerId
+          in: query
+          schema:
+            type: string
+        - name: disposition
+          in: query
+          schema:
+            $ref: '#/components/schemas/CallDisposition'
+      responses:
+        '200':
+          description: Call log entries
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CallLogItem'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /logs/sms:
+    get:
+      tags: [Logs]
+      summary: Query SMS logs
+      description: Returns SMS log entries from DynamoDB with optional filters.
+      operationId: getSmsLogs
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: numberId
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: from
+          in: query
+          description: Start of date range (ISO 8601)
+          schema:
+            type: string
+            format: date-time
+        - name: to
+          in: query
+          description: End of date range (ISO 8601)
+          schema:
+            type: string
+            format: date-time
+        - name: sender
+          in: query
+          schema:
+            type: string
+        - name: status
+          in: query
+          schema:
+            $ref: '#/components/schemas/SmsLogStatus'
+      responses:
+        '200':
+          description: SMS log entries
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/SmsLogItem'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # Download routes
+  # ═══════════════════════════════════════════════════════════════════════════
+  /download/voicemail/{id}:
+    get:
+      tags: [Downloads]
+      summary: Get voicemail download URL
+      description: Returns a pre-signed URL for downloading a voicemail audio file.
+      operationId: getVoicemailDownloadUrl
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Pre-signed download URL
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DownloadUrlResponse'
+              example:
+                url: https://storage.telnyx.com/presigned/voicemail.wav?token=abc
+                expiresAt: '2025-01-15T12:00:00Z'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /download/sms/{numberId}:
+    get:
+      tags: [Downloads]
+      summary: Get SMS export download URL
+      description: Returns a pre-signed URL for downloading an SMS export for a parked number.
+      operationId: getSmsDownloadUrl
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: numberId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Pre-signed download URL
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DownloadUrlResponse'
+              example:
+                url: https://storage.telnyx.com/presigned/sms-export.csv?token=xyz
+                expiresAt: '2025-01-15T12:00:00Z'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # Billing routes
+  # ═══════════════════════════════════════════════════════════════════════════
+  /billing/session:
+    post:
+      tags: [Billing]
+      summary: Create a payment session
+      description: Creates an Adyen payment session for the authenticated user.
+      operationId: createBillingSession
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: Payment session created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreateSessionResponse'
+              example:
+                sessionId: sess_abc123
+                sessionData: eyJhbGciOiJIUzI1NiJ9...
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /billing/subscriptions:
+    post:
+      tags: [Billing]
+      summary: Create a subscription
+      description: >
+        Creates a new subscription for the authenticated user.
+        Returns 409 if the user already has an active subscription.
+      operationId: createSubscription
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateSubscriptionRequest'
+            example:
+              packageId: 550e8400-e29b-41d4-a716-446655440000
+      responses:
+        '201':
+          description: Subscription created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Subscription'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /billing/subscriptions/{id}:
+    put:
+      tags: [Billing]
+      summary: Update a subscription
+      description: Changes the package on an existing subscription.
+      operationId: updateSubscription
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateSubscriptionRequest'
+            example:
+              packageId: 550e8400-e29b-41d4-a716-446655440001
+      responses:
+        '200':
+          description: Subscription updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Subscription'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    delete:
+      tags: [Billing]
+      summary: Cancel a subscription
+      description: Marks the subscription for cancellation at the end of the current billing period.
+      operationId: cancelSubscription
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Subscription cancelled
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+              example:
+                message: Subscription cancelled
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /billing/subscriptions/{id}/reactivate:
+    post:
+      tags: [Billing]
+      summary: Reactivate a subscription
+      description: >
+        Reactivates a cancelled or past_due subscription.
+        Returns 400 if the subscription is active or trialing.
+      operationId: reactivateSubscription
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Subscription reactivated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Subscription'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /billing/invoices:
+    get:
+      tags: [Billing]
+      summary: List invoices
+      description: Returns all invoices for the authenticated user.
+      operationId: listInvoices
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: List of invoices
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Invoice'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # Admin routes (Cognito authorizer — admin group enforced at Lambda level)
+  # ═══════════════════════════════════════════════════════════════════════════
+  /admin/users:
+    get:
+      tags: [Admin]
+      summary: List all users
+      description: Returns all users. Requires admin group membership.
+      operationId: listUsers
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: List of users
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/User'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /admin/users/{id}:
+    get:
+      tags: [Admin]
+      summary: Get user details
+      description: Returns a single user by ID. Requires admin group membership.
+      operationId: getUser
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: User details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /admin/users/{id}/status:
+    put:
+      tags: [Admin]
+      summary: Set user status
+      description: Enables or disables a user. Creates an audit log entry.
+      operationId: setUserStatus
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SetUserStatusRequest'
+            example:
+              enabled: false
+      responses:
+        '200':
+          description: User status updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+              example:
+                message: User status updated
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /admin/users/{id}/package:
+    put:
+      tags: [Admin]
+      summary: Change user package
+      description: Assigns a different package to a user. Creates an audit log entry.
+      operationId: setUserPackage
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SetUserPackageRequest'
+            example:
+              packageId: 550e8400-e29b-41d4-a716-446655440000
+              effectiveImmediately: true
+      responses:
+        '200':
+          description: User package updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+              example:
+                message: User package updated
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /admin/users/{id}/feature-flags:
+    put:
+      tags: [Admin]
+      summary: Set user feature flag overrides
+      description: Sets per-user feature flag overrides. Creates an audit log entry.
+      operationId: setUserFeatureFlags
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SetUserFeatureFlagsRequest'
+            example:
+              max_numbers: 10
+              spam_filter_enabled: true
+      responses:
+        '200':
+          description: Feature flags updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+              example:
+                message: Feature flags updated
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /admin/users/{id}/billing:
+    get:
+      tags: [Admin]
+      summary: Get user billing info
+      description: Returns subscription and invoice data for a specific user.
+      operationId: getUserBilling
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: User billing information
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  subscription:
+                    $ref: '#/components/schemas/Subscription'
+                  invoices:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Invoice'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /admin/packages:
+    get:
+      tags: [Admin]
+      summary: List all packages
+      description: Returns all packages including soft-deleted ones. Requires admin group.
+      operationId: listPackages
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: List of packages
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Package'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    post:
+      tags: [Admin]
+      summary: Create a package
+      description: Creates a new subscription package. Creates an audit log entry.
+      operationId: createPackage
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreatePackageRequest'
+            example:
+              name: Pro Plan
+              description: Best for power users
+              priceMonthly: 999
+              perNumberPrice: 200
+              publiclyVisible: true
+              sortOrder: 1
+      responses:
+        '201':
+          description: Package created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Package'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /admin/packages/{id}:
+    put:
+      tags: [Admin]
+      summary: Update a package
+      description: Updates an existing package. Creates an audit log entry.
+      operationId: updatePackage
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreatePackageRequest'
+            example:
+              name: Pro Plan v2
+              priceMonthly: 1299
+              publiclyVisible: true
+              sortOrder: 1
+      responses:
+        '200':
+          description: Package updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Package'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    delete:
+      tags: [Admin]
+      summary: Delete a package
+      description: >
+        Soft-deletes a package. Returns 409 if the package has active subscribers.
+        Creates an audit log entry.
+      operationId: deletePackage
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Package deleted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+              example:
+                message: Package deleted
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /admin/feature-flags/defaults:
+    get:
+      tags: [Admin]
+      summary: Get default feature flags
+      description: Returns all default feature flag values.
+      operationId: getFeatureFlagDefaults
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Default feature flags
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/FeatureFlag'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    put:
+      tags: [Admin]
+      summary: Update default feature flags
+      description: Updates default feature flag values. Creates an audit log entry.
+      operationId: updateFeatureFlagDefaults
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FeatureFlagDefaults'
+            example:
+              max_numbers: 5
+              spam_filter_enabled: false
+      responses:
+        '200':
+          description: Feature flag defaults updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+              example:
+                message: Feature flag defaults updated
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /admin/audit-log:
+    get:
+      tags: [Admin]
+      summary: Get audit log
+      description: Returns admin audit log entries.
+      operationId: getAuditLog
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Audit log entries
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AdminAuditLog'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # Public routes
+  # ═══════════════════════════════════════════════════════════════════════════
+  /packages/public:
+    get:
+      tags: [Public]
+      summary: List publicly visible packages
+      description: >
+        Returns only packages where publicly_visible is true and deleted_at is null,
+        ordered by sort_order ascending. No authentication required.
+      operationId: getPublicPackages
+      security: []
+      responses:
+        '200':
+          description: Public packages
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Package'
+              example:
+                - id: 550e8400-e29b-41d4-a716-446655440000
+                  name: Starter
+                  description: Get started with KeepNum
+                  price_monthly_cents: 499
+                  per_number_price_cents: 100
+                  publicly_visible: true
+                  sort_order: 0
+                  created_at: '2025-01-01T00:00:00Z'
+                  updated_at: '2025-01-01T00:00:00Z'
+                  deleted_at: null
+                - id: 550e8400-e29b-41d4-a716-446655440001
+                  name: Pro Plan
+                  description: Best for power users
+                  price_monthly_cents: 999
+                  per_number_price_cents: 200
+                  publicly_visible: true
+                  sort_order: 1
+                  created_at: '2025-01-01T00:00:00Z'
+                  updated_at: '2025-01-01T00:00:00Z'
+                  deleted_at: null
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # Webhook routes (no Cognito authorizer — WAF-allowlisted)
+  # ═══════════════════════════════════════════════════════════════════════════
+  /webhooks/telnyx/call:
+    post:
+      tags: [Webhooks]
+      summary: Telnyx call webhook
+      description: >
+        Receives Telnyx call control webhooks (call.initiated, call.answered, etc.).
+        This endpoint is unauthenticated — protected by WAF IP allowlisting for
+        Telnyx source IPs. The handler processes the full call routing decision tree:
+        block list check, spam filter, per-caller rules, call screening, and forwarding.
+      operationId: telnyxCallWebhook
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TelnyxCallWebhookPayload'
+      responses:
+        '200':
+          description: Webhook processed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WebhookAck'
+              example:
+                message: Event acknowledged
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /webhooks/telnyx/sms:
+    post:
+      tags: [Webhooks]
+      summary: Telnyx SMS webhook
+      description: >
+        Receives Telnyx messaging webhooks (message.received, etc.).
+        This endpoint is unauthenticated — protected by WAF IP allowlisting for
+        Telnyx source IPs. The handler processes spam filtering, SMS/email forwarding,
+        and MMS media storage.
+      operationId: telnyxSmsWebhook
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TelnyxSmsWebhookPayload'
+      responses:
+        '200':
+          description: Webhook processed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WebhookAck'
+              example:
+                message: Event acknowledged
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /webhooks/telnyx/voicemail:
+    post:
+      tags: [Webhooks]
+      summary: Telnyx voicemail webhook
+      description: >
+        Receives Telnyx recording webhooks (recording.completed,
+        recording.transcription.completed). This endpoint is unauthenticated —
+        protected by WAF IP allowlisting for Telnyx source IPs. The handler stores
+        audio, creates voicemail records, and processes transcription results.
+      operationId: telnyxVoicemailWebhook
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TelnyxVoicemailWebhookPayload'
+      responses:
+        '200':
+          description: Webhook processed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WebhookAck'
+              example:
+                message: Event acknowledged
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /webhooks/adyen:
+    post:
+      tags: [Webhooks]
+      summary: Adyen payment webhook
+      description: >
+        Receives Adyen payment notification webhooks (AUTHORISATION, CANCELLATION,
+        REFUND, CHARGEBACK). This endpoint is unauthenticated — protected by WAF IP
+        allowlisting for Adyen source IPs and HMAC signature validation. The handler
+        verifies the HMAC signature before processing any event.
+      operationId: adyenWebhook
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdyenWebhookPayload'
+      responses:
+        '200':
+          description: Webhook processed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WebhookAck'
+              example:
+                message: '[accepted]'
+        '401':
+          description: Invalid HMAC signature
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: Invalid HMAC signature
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # Virtual Number routes
+  # ═══════════════════════════════════════════════════════════════════════════
+  /virtual-numbers/search:
+    get:
+      tags: [Virtual Numbers]
+      summary: Search available virtual numbers
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: areaCode
+          in: query
+          schema: { type: string }
+        - name: region
+          in: query
+          schema: { type: string }
+        - name: pattern
+          in: query
+          schema: { type: string }
+      responses:
+        '200':
+          description: Available numbers
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  numbers:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        phone_number: { type: string }
+                        region: { type: string }
+                        monthly_cost_cents: { type: integer }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /virtual-numbers:
+    post:
+      tags: [Virtual Numbers]
+      summary: Provision a virtual number
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [phoneNumber]
+              properties:
+                phoneNumber: { type: string }
+      responses:
+        '201':
+          description: Number provisioned
+        '403':
+          description: Limit reached or feature disabled
+        '401': { $ref: '#/components/responses/Unauthorized' }
+    get:
+      tags: [Virtual Numbers]
+      summary: List user's virtual numbers
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: Virtual number list
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /virtual-numbers/{id}:
+    get:
+      tags: [Virtual Numbers]
+      summary: Get virtual number details
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200': { description: Virtual number detail }
+        '404': { description: Not found }
+    delete:
+      tags: [Virtual Numbers]
+      summary: Release a virtual number
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200': { description: Number released }
+        '404': { description: Not found }
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # IVR routes
+  # ═══════════════════════════════════════════════════════════════════════════
+  /ivr-menus:
+    post:
+      tags: [IVR]
+      summary: Create IVR menu
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [numberId, name, greetingText]
+              properties:
+                numberId: { type: string, format: uuid }
+                name: { type: string }
+                greetingText: { type: string }
+                options:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      digit: { type: integer, minimum: 1, maximum: 9 }
+                      action: { type: string, enum: [forward, voicemail, sub_menu, play_disconnect] }
+                      actionData: { type: string }
+      responses:
+        '201': { description: IVR menu created }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+    get:
+      tags: [IVR]
+      summary: List IVR menus
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200': { description: IVR menu list }
+
+  /ivr-menus/{id}:
+    get:
+      tags: [IVR]
+      summary: Get IVR menu
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200': { description: IVR menu detail }
+    put:
+      tags: [IVR]
+      summary: Update IVR menu
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200': { description: Updated }
+    delete:
+      tags: [IVR]
+      summary: Delete IVR menu
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200': { description: Deleted }
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # Auto-Reply routes
+  # ═══════════════════════════════════════════════════════════════════════════
+  /auto-reply-templates:
+    post:
+      tags: [Auto Reply]
+      summary: Create auto-reply template
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [numberId, scenario, message]
+              properties:
+                numberId: { type: string, format: uuid }
+                scenario: { type: string, enum: [all_missed, busy, after_hours, specific_caller] }
+                message: { type: string, maxLength: 480 }
+                specificCaller: { type: string }
+      responses:
+        '201': { description: Template created }
+    get:
+      tags: [Auto Reply]
+      summary: List auto-reply templates
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200': { description: Template list }
+
+  /auto-reply-templates/{id}:
+    put:
+      tags: [Auto Reply]
+      summary: Update auto-reply template
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200': { description: Updated }
+    delete:
+      tags: [Auto Reply]
+      summary: Delete auto-reply template
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200': { description: Deleted }
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # Voicemail extended routes (bulk, search, sharing, recordings, marketplace)
+  # ═══════════════════════════════════════════════════════════════════════════
+  /voicemails/bulk/move:
+    put:
+      tags: [Voicemails]
+      summary: Bulk move voicemails to folder
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [ids, folder]
+              properties:
+                ids: { type: array, items: { type: string } }
+                folder: { type: string, enum: [inbox, saved, trash] }
+      responses:
+        '200': { description: Moved }
+
+  /voicemails/bulk/read:
+    put:
+      tags: [Voicemails]
+      summary: Bulk mark voicemails read/unread
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [ids, read]
+              properties:
+                ids: { type: array, items: { type: string } }
+                read: { type: boolean }
+      responses:
+        '200': { description: Updated }
+
+  /voicemails/bulk/delete:
+    delete:
+      tags: [Voicemails]
+      summary: Permanently delete voicemails from trash
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [ids]
+              properties:
+                ids: { type: array, items: { type: string } }
+      responses:
+        '200': { description: Deleted }
+
+  /voicemails/search:
+    get:
+      tags: [Voicemails]
+      summary: Search voicemails
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: query
+          in: query
+          schema: { type: string }
+        - name: folder
+          in: query
+          schema: { type: string }
+        - name: dateFrom
+          in: query
+          schema: { type: string, format: date }
+        - name: dateTo
+          in: query
+          schema: { type: string, format: date }
+      responses:
+        '200': { description: Search results }
+
+  /voicemails/{id}/share:
+    post:
+      tags: [Voicemails]
+      summary: Create share link for voicemail
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                expiresInHours: { type: integer, default: 72 }
+                notifyEmail: { type: string }
+                notifySms: { type: string }
+      responses:
+        '201': { description: Share link created }
+
+  /voicemails/{id}/share/{shareToken}:
+    delete:
+      tags: [Voicemails]
+      summary: Revoke voicemail share link
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - name: shareToken
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: Revoked }
+
+  /shared/voicemail/{shareToken}:
+    get:
+      tags: [Public]
+      summary: Access shared voicemail (no auth)
+      parameters:
+        - name: shareToken
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: Shared voicemail data }
+        '410': { description: Share link expired or revoked }
+
+  /recordings:
+    get:
+      tags: [Voicemails]
+      summary: List call recordings
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200': { description: Recording list }
+
+  /recordings/{callId}:
+    get:
+      tags: [Voicemails]
+      summary: Get recording detail
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: callId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: Recording detail }
+
+  /download/recording/{callId}:
+    get:
+      tags: [Downloads]
+      summary: Get recording download URL (15-min expiry)
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: callId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: Pre-signed URL }
+
+  /greetings/marketplace:
+    get:
+      tags: [Greetings Marketplace]
+      summary: Browse marketplace greetings
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: category
+          in: query
+          schema: { type: string }
+        - name: page
+          in: query
+          schema: { type: integer }
+        - name: limit
+          in: query
+          schema: { type: integer }
+      responses:
+        '200': { description: Greeting catalogue }
+
+  /greetings/marketplace/{id}/preview:
+    get:
+      tags: [Greetings Marketplace]
+      summary: Preview marketplace greeting audio
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200': { description: Preview audio URL }
+
+  /greetings/marketplace/{id}/apply:
+    post:
+      tags: [Greetings Marketplace]
+      summary: Apply marketplace greeting to a number
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [numberId]
+              properties:
+                numberId: { type: string, format: uuid }
+      responses:
+        '200': { description: Greeting applied }
+
+  /greetings/custom-request:
+    post:
+      tags: [Greetings Marketplace]
+      summary: Submit custom greeting request
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [script]
+              properties:
+                script: { type: string }
+                voicePreference: { type: string }
+      responses:
+        '201': { description: Request submitted }
+
+  /voicemails/sms-config:
+    get:
+      tags: [Voicemails]
+      summary: Get voicemail-to-SMS config
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200': { description: SMS config }
+    put:
+      tags: [Voicemails]
+      summary: Update voicemail-to-SMS config
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                enabled: { type: boolean }
+                destinationNumber: { type: string }
+      responses:
+        '200': { description: Config updated }
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # Unified Inbox routes
+  # ═══════════════════════════════════════════════════════════════════════════
+  /unified-inbox:
+    get:
+      tags: [Unified Inbox]
+      summary: Get unified inbox feed
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: type
+          in: query
+          schema: { type: string, enum: [voicemail, missed_call, sms] }
+        - name: numberId
+          in: query
+          schema: { type: string }
+        - name: dateFrom
+          in: query
+          schema: { type: string, format: date }
+        - name: dateTo
+          in: query
+          schema: { type: string, format: date }
+        - name: page
+          in: query
+          schema: { type: integer }
+        - name: limit
+          in: query
+          schema: { type: integer, default: 50 }
+      responses:
+        '200': { description: Unified inbox items }
+
+  /unified-inbox/{itemId}:
+    get:
+      tags: [Unified Inbox]
+      summary: Get unified inbox item detail
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: itemId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: Item detail }
+
+  /unified-inbox/unread-count:
+    get:
+      tags: [Unified Inbox]
+      summary: Get unread count
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: Unread count
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  count: { type: integer }
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # Privacy Scan routes
+  # ═══════════════════════════════════════════════════════════════════════════
+  /privacy-scans:
+    post:
+      tags: [Privacy Scan]
+      summary: Initiate privacy scan
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [phoneNumber]
+              properties:
+                phoneNumber: { type: string }
+      responses:
+        '201': { description: Scan initiated }
+    get:
+      tags: [Privacy Scan]
+      summary: List scan history
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200': { description: Scan history }
+
+  /privacy-scans/{scanId}:
+    get:
+      tags: [Privacy Scan]
+      summary: Get scan results
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: scanId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200': { description: Scan results with findings }
+
+  /privacy-scans/{scanId}/compare:
+    get:
+      tags: [Privacy Scan]
+      summary: Compare scan with previous
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: scanId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200': { description: Comparison (new, resolved, unchanged) }
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # Caller ID routes
+  # ═══════════════════════════════════════════════════════════════════════════
+  /caller-id/lookup/{phoneNumber}:
+    get:
+      tags: [Caller ID]
+      summary: Look up caller ID
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: phoneNumber
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Caller ID info
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  name: { type: string }
+                  city: { type: string }
+                  state: { type: string }
+                  carrier: { type: string }
+                  spamScore: { type: integer, minimum: 0, maximum: 100 }
+
+  /caller-id/lookup:
+    post:
+      tags: [Caller ID]
+      summary: Batch caller ID lookup
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [phoneNumbers]
+              properties:
+                phoneNumbers: { type: array, items: { type: string } }
+      responses:
+        '200': { description: Batch lookup results }
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # Conference routes
+  # ═══════════════════════════════════════════════════════════════════════════
+  /conferences:
+    post:
+      tags: [Conference]
+      summary: Create conference bridge
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name: { type: string }
+                maxParticipants: { type: integer, default: 10 }
+      responses:
+        '201': { description: Conference created with dial-in and PIN }
+    get:
+      tags: [Conference]
+      summary: List conferences
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200': { description: Conference list }
+
+  /conferences/{id}:
+    get:
+      tags: [Conference]
+      summary: Get conference details
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200': { description: Conference detail with participants }
+    delete:
+      tags: [Conference]
+      summary: End conference
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200': { description: Conference ended }
+
+  /conferences/{id}/participants/{participantId}:
+    put:
+      tags: [Conference]
+      summary: Mute/unmute participant
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - name: participantId
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [muted]
+              properties:
+                muted: { type: boolean }
+      responses:
+        '200': { description: Updated }
+    delete:
+      tags: [Conference]
+      summary: Remove participant
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - name: participantId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: Removed }
+
+  /conferences/{id}/merge:
+    post:
+      tags: [Conference]
+      summary: Merge active call into conference
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [callId]
+              properties:
+                callId: { type: string }
+      responses:
+        '200': { description: Call merged }
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # Notification routes
+  # ═══════════════════════════════════════════════════════════════════════════
+  /devices:
+    post:
+      tags: [Notifications]
+      summary: Register device for push notifications
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [platform, token]
+              properties:
+                platform: { type: string, enum: [ios, android] }
+                token: { type: string }
+      responses:
+        '201': { description: Device registered }
+
+  /devices/{deviceId}:
+    delete:
+      tags: [Notifications]
+      summary: Unregister device
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: deviceId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: Unregistered }
+
+  /notifications/settings:
+    get:
+      tags: [Notifications]
+      summary: Get notification settings
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200': { description: Notification settings }
+    put:
+      tags: [Notifications]
+      summary: Update notification settings
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                numberId: { type: string }
+                pushEnabled: { type: boolean }
+                smsEnabled: { type: boolean }
+      responses:
+        '200': { description: Settings updated }
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # DND Schedule routes
+  # ═══════════════════════════════════════════════════════════════════════════
+  /numbers/{id}/dnd-schedules:
+    post:
+      tags: [DND]
+      summary: Create DND schedule
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, daysOfWeek, startTime, endTime, timezone]
+              properties:
+                name: { type: string }
+                daysOfWeek: { type: array, items: { type: string } }
+                startTime: { type: string, example: '22:00' }
+                endTime: { type: string, example: '07:00' }
+                timezone: { type: string, example: 'America/New_York' }
+      responses:
+        '201': { description: Schedule created }
+    get:
+      tags: [DND]
+      summary: List DND schedules for number
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200': { description: Schedule list }
+
+  /numbers/{id}/dnd-schedules/{scheduleId}:
+    put:
+      tags: [DND]
+      summary: Update DND schedule
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - name: scheduleId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200': { description: Updated }
+    delete:
+      tags: [DND]
+      summary: Delete DND schedule
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - name: scheduleId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200': { description: Deleted }
+
+  /numbers/{id}/dnd-schedules/{scheduleId}/toggle:
+    put:
+      tags: [DND]
+      summary: Toggle DND schedule on/off
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - name: scheduleId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200': { description: Toggled }
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # Contact & Smart Routing routes
+  # ═══════════════════════════════════════════════════════════════════════════
+  /contacts/import:
+    post:
+      tags: [Contacts]
+      summary: Import contacts
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [source, contacts]
+              properties:
+                source: { type: string, enum: [device, csv] }
+                contacts:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      name: { type: string }
+                      phoneNumber: { type: string }
+                      tier: { type: string, enum: [vip, known, unknown] }
+      responses:
+        '201': { description: Contacts imported }
+
+  /contacts:
+    get:
+      tags: [Contacts]
+      summary: List contacts
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200': { description: Contact list }
+
+  /contacts/{contactId}:
+    put:
+      tags: [Contacts]
+      summary: Update contact
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: contactId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200': { description: Updated }
+    delete:
+      tags: [Contacts]
+      summary: Delete contact
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: contactId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200': { description: Deleted }
+
+  /contacts/tier-actions:
+    put:
+      tags: [Contacts]
+      summary: Configure tier actions
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                vip: { type: object, properties: { action: { type: string }, data: { type: string } } }
+                known: { type: object, properties: { action: { type: string }, data: { type: string } } }
+                unknown: { type: object, properties: { action: { type: string }, data: { type: string } } }
+      responses:
+        '200': { description: Tier actions updated }
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # Admin Greetings routes
+  # ═══════════════════════════════════════════════════════════════════════════
+  /admin/greetings:
+    post:
+      tags: [Admin]
+      summary: Create marketplace greeting
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, category, audioUrl]
+              properties:
+                name: { type: string }
+                category: { type: string }
+                audioUrl: { type: string }
+                voiceTalent: { type: string }
+      responses:
+        '201': { description: Greeting created }
+
+  /admin/greetings/{id}:
+    put:
+      tags: [Admin]
+      summary: Update marketplace greeting
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200': { description: Updated }
+    delete:
+      tags: [Admin]
+      summary: Delete marketplace greeting
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200': { description: Deleted }
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # Webhook routes (new)
+  # ═══════════════════════════════════════════════════════════════════════════
+  /webhooks/telnyx/ivr:
+    post:
+      tags: [Webhooks]
+      summary: Telnyx IVR DTMF webhook
+      description: Handles DTMF gather events for IVR menus
+      responses:
+        '200': { description: Acknowledged }
+
+  /webhooks/telnyx/conference:
+    post:
+      tags: [Webhooks]
+      summary: Telnyx conference event webhook
+      description: Handles join/leave events for conference bridges
+      responses:
+        '200': { description: Acknowledged }
