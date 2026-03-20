@@ -6,7 +6,7 @@ resource "aws_amplify_app" "web" {
   name       = "${var.project_name}-${var.environment}-web"
   repository = var.repository_url
 
-  access_token = var.github_access_token
+  oauth_token = var.github_access_token
 
   environment_variables = {
     REACT_APP_COGNITO_USER_POOL_ID = var.cognito_user_pool_id
@@ -64,7 +64,7 @@ resource "aws_amplify_app" "admin" {
   name       = "${var.project_name}-${var.environment}-admin"
   repository = var.repository_url
 
-  access_token = var.github_access_token
+  oauth_token = var.github_access_token
 
   environment_variables = {
     REACT_APP_COGNITO_USER_POOL_ID = var.cognito_user_pool_id
@@ -122,7 +122,7 @@ resource "aws_amplify_app" "sales" {
   name       = "${var.project_name}-${var.environment}-sales"
   repository = var.repository_url
 
-  access_token = var.github_access_token
+  oauth_token = var.github_access_token
 
   environment_variables = {
     REACT_APP_API_URL    = var.api_gateway_url
