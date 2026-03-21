@@ -39,7 +39,7 @@ const LoginPage: React.FC = () => {
               <Input type="email" placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} />
               <Input type="password" placeholder="Password" value={password} onChange={(e) => setPassword(e.target.value)} />
               {error && <div style={{ backgroundColor: '#fef2f2', borderRadius: 8, padding: '8px 12px', color: '#dc2626', fontSize: '0.85rem' }}>{error}</div>}
-              <Button label={submitting ? 'Signing in…' : 'Sign In'} variant="primary" size="md" onClick={() => {}} />
+              <Button label={submitting ? 'Signing in…' : 'Sign In'} variant="primary" size="md" type="submit" disabled={submitting} />
             </div>
           </form>
         </Card>

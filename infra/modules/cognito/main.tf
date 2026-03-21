@@ -26,6 +26,11 @@ resource "aws_cognito_user_pool" "main" {
     }
   }
 
+  # Advanced security — adaptive authentication for SOC 2
+  user_pool_add_ons {
+    advanced_security_mode = "AUDIT"
+  }
+
   schema {
     name                = "email"
     attribute_data_type = "String"

@@ -17,6 +17,8 @@ export interface ButtonProps {
   size?: ButtonSize;
   disabled?: boolean;
   loading?: boolean;
+  /** HTML button type (web only) — defaults to "button" */
+  type?: 'button' | 'submit' | 'reset';
   /** Additional CSS class names (web only) */
   className?: string;
   /** Test ID for automated testing */
@@ -66,6 +68,7 @@ export const Button: React.FC<ButtonProps> = ({
   size = 'md',
   disabled = false,
   loading = false,
+  type = 'button',
   className,
   testID,
 }) => {
@@ -132,7 +135,7 @@ export const Button: React.FC<ButtonProps> = ({
   // Web rendering
   return (
     <button
-      type="button"
+      type={type}
       onClick={handleClick}
       disabled={disabled || loading}
       className={className}

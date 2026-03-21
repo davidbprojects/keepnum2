@@ -10,7 +10,8 @@
     "test": "jest --passWithNoTests"
   },
   "dependencies": {
-    "aws-amplify": "^6.0.0"
+    "aws-amplify": "^6.0.0",
+    "aws-rum-web": "^1.25.0"
   },
   "devDependencies": {
     "@types/aws-lambda": "^8.10.130",
@@ -24,7 +25,12 @@
   "jest": {
     "preset": "ts-jest",
     "testEnvironment": "node",
-    "roots": ["<rootDir>/src"],
-    "testPathIgnorePatterns": ["/node_modules/", "/__tests__/helpers/"]
+    "roots": [
+      "<rootDir>/src"
+    ],
+    "testPathIgnorePatterns": [
+      "/node_modules/",
+      "/__tests__/helpers/"
+    ]
   }
 }

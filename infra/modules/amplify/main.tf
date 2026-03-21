@@ -13,6 +13,9 @@ resource "aws_amplify_app" "web" {
     REACT_APP_COGNITO_CLIENT_ID    = var.cognito_client_id
     REACT_APP_API_URL              = var.api_gateway_url
     REACT_APP_AWS_REGION           = var.aws_region
+    REACT_APP_RUM_APP_MONITOR_ID   = var.rum_web_app_monitor_id
+    REACT_APP_RUM_IDENTITY_POOL_ID = var.rum_identity_pool_id
+    REACT_APP_RUM_GUEST_ROLE_ARN   = var.rum_guest_role_arn
   }
 
   build_spec = <<-YAML
@@ -71,6 +74,9 @@ resource "aws_amplify_app" "admin" {
     REACT_APP_COGNITO_CLIENT_ID    = var.cognito_client_id
     REACT_APP_API_URL              = var.api_gateway_url
     REACT_APP_AWS_REGION           = var.aws_region
+    REACT_APP_RUM_APP_MONITOR_ID   = var.rum_admin_app_monitor_id
+    REACT_APP_RUM_IDENTITY_POOL_ID = var.rum_identity_pool_id
+    REACT_APP_RUM_GUEST_ROLE_ARN   = var.rum_guest_role_arn
   }
 
   build_spec = <<-YAML
@@ -125,8 +131,11 @@ resource "aws_amplify_app" "sales" {
   oauth_token = var.github_access_token
 
   environment_variables = {
-    REACT_APP_API_URL    = var.api_gateway_url
-    REACT_APP_AWS_REGION = var.aws_region
+    REACT_APP_API_URL              = var.api_gateway_url
+    REACT_APP_AWS_REGION           = var.aws_region
+    REACT_APP_RUM_APP_MONITOR_ID   = var.rum_sales_app_monitor_id
+    REACT_APP_RUM_IDENTITY_POOL_ID = var.rum_identity_pool_id
+    REACT_APP_RUM_GUEST_ROLE_ARN   = var.rum_guest_role_arn
   }
 
   build_spec = <<-YAML

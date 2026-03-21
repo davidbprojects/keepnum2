@@ -55,7 +55,7 @@ const LoginPage: React.FC = () => {
                 autoComplete="current-password"
               />
               {error && <p style={{ color: '#dc2626', fontSize: '0.875rem', margin: 0, padding: '8px 12px', backgroundColor: '#fef2f2', borderRadius: 8 }}>{error}</p>}
-              <Button label="Sign In" loading={loading} testID="login-submit" onClick={() => handleSubmit(new Event('submit') as unknown as React.FormEvent)} />
+              <Button label="Sign In" loading={loading} testID="login-submit" type="submit" />
             </div>
           </form>
           <p style={{ marginTop: 20, fontSize: '0.875rem', textAlign: 'center', color: '#64748b' }}>

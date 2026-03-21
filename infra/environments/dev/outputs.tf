@@ -46,3 +46,14 @@ output "dynamodb_call_logs_table" {
   description = "DynamoDB call_logs table name"
   value       = module.dynamodb.call_logs_table_name
 }
+
+# CloudWatch RUM
+output "rum_identity_pool_id" {
+  description = "Cognito Identity Pool ID for RUM"
+  value       = module.cloudwatch_rum.identity_pool_id
+}
+
+output "rum_app_monitor_ids" {
+  description = "RUM App Monitor IDs"
+  value       = module.cloudwatch_rum.app_monitor_ids
+}

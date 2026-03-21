@@ -159,6 +159,13 @@ module "amplify" {
   api_gateway_url      = module.api_gateway.api_gateway_url
   aws_region           = var.aws_region
   waf_web_acl_arn      = module.waf.web_acl_arn
+
+  # CloudWatch RUM
+  rum_identity_pool_id     = module.cloudwatch_rum.identity_pool_id
+  rum_guest_role_arn       = module.cloudwatch_rum.guest_role_arn
+  rum_web_app_monitor_id   = module.cloudwatch_rum.app_monitor_ids["web"]
+  rum_admin_app_monitor_id = module.cloudwatch_rum.app_monitor_ids["admin"]
+  rum_sales_app_monitor_id = module.cloudwatch_rum.app_monitor_ids["sales"]
 }
 
 ###############################################################################
@@ -172,4 +179,31 @@ module "eventbridge" {
   environment                        = var.environment
   retention_job_lambda_arn            = module.lambda.function_arns["retention-job"]
   retention_job_lambda_function_name  = "${var.project_name}-${var.environment}-retention-job"
+}
+
+###############################################################################
+# CloudWatch RUM — Real User Monitoring
+###############################################################################
+
+module "cloudwatch_rum" {
+  source = "../../modules/cloudwatch-rum"
+
+  project_name     = var.project_name
+  environment      = var.environment
+  aws_region       = var.aws_region
+  web_app_domain   = "main.${module.amplify.web_app_raw_domain}"
+  admin_app_domain = "main.${module.amplify.admin_app_raw_domain}"
+  sales_app_domain = "main.${module.amplify.sales_app_raw_domain}"
+}
+
+###############################################################################
+# Security Hardening — CloudTrail + GuardDuty (SOC 2)
+###############################################################################
+
+module "security" {
+  source = "../../modules/security"
+
+  project_name = var.project_name
+  environment  = var.environment
+  aws_region   = var.aws_region
 }

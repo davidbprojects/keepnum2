@@ -375,10 +375,40 @@ resource "aws_api_gateway_deployment" "main" {
   ]
 }
 
+###############################################################################
+# Access Logging — CloudWatch Log Group for API Gateway
+###############################################################################
+resource "aws_cloudwatch_log_group" "api_access_logs" {
+  name              = "/aws/apigateway/${var.project_name}-${var.environment}-api-access"
+  retention_in_days = var.environment == "prod" ? 90 : 14
+
+  tags = {
+    Project     = var.project_name
+    Environment = var.environment
+  }
+}
+
 resource "aws_api_gateway_stage" "main" {
   rest_api_id   = aws_api_gateway_rest_api.main.id
   deployment_id = aws_api_gateway_deployment.main.id
   stage_name    = var.environment
+
+  access_log_settings {
+    destination_arn = aws_cloudwatch_log_group.api_access_logs.arn
+    format = jsonencode({
+      requestId      = "$context.requestId"
+      ip             = "$context.identity.sourceIp"
+      caller         = "$context.identity.caller"
+      user           = "$context.identity.user"
+      requestTime    = "$context.requestTime"
+      httpMethod     = "$context.httpMethod"
+      resourcePath   = "$context.resourcePath"
+      status         = "$context.status"
+      protocol       = "$context.protocol"
+      responseLength = "$context.responseLength"
+      userAgent      = "$context.identity.userAgent"
+    })
+  }
 
   tags = {
     Project     = var.project_name
@@ -392,6 +422,21 @@ resource "aws_api_gateway_stage" "main" {
 resource "aws_wafv2_web_acl_association" "api_gateway" {
   resource_arn = aws_api_gateway_stage.main.arn
   web_acl_arn  = var.waf_web_acl_arn
+}
+
+###############################################################################
+# Method Settings — enable CloudWatch metrics and logging
+###############################################################################
+resource "aws_api_gateway_method_settings" "all" {
+  rest_api_id = aws_api_gateway_rest_api.main.id
+  stage_name  = aws_api_gateway_stage.main.stage_name
+  method_path = "*/*"
+
+  settings {
+    metrics_enabled    = true
+    logging_level      = "INFO"
+    data_trace_enabled = var.environment != "prod"
+  }
 }
 
 ###############################################################################

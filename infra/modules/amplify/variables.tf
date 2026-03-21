@@ -44,3 +44,33 @@ variable "waf_web_acl_arn" {
   type        = string
   default     = ""
 }
+
+variable "rum_identity_pool_id" {
+  description = "Cognito Identity Pool ID for CloudWatch RUM"
+  type        = string
+  default     = ""
+}
+
+variable "rum_web_app_monitor_id" {
+  description = "CloudWatch RUM App Monitor ID for web app"
+  type        = string
+  default     = ""
+}
+
+variable "rum_admin_app_monitor_id" {
+  description = "CloudWatch RUM App Monitor ID for admin app"
+  type        = string
+  default     = ""
+}
+
+variable "rum_sales_app_monitor_id" {
+  description = "CloudWatch RUM App Monitor ID for sales app"
+  type        = string
+  default     = ""
+}
+
+variable "rum_guest_role_arn" {
+  description = "IAM role ARN for unauthenticated RUM access"
+  type        = string
+  default     = ""
+}
