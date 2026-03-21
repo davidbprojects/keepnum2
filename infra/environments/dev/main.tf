@@ -191,9 +191,9 @@ module "cloudwatch_rum" {
   project_name     = var.project_name
   environment      = var.environment
   aws_region       = var.aws_region
-  web_app_domain   = "main.${module.amplify.web_app_raw_domain}"
-  admin_app_domain = "main.${module.amplify.admin_app_raw_domain}"
-  sales_app_domain = "main.${module.amplify.sales_app_raw_domain}"
+  web_app_domain   = "main.d1oif9zxzbu8sd.amplifyapp.com"
+  admin_app_domain = "main.d1qc83ne8y1s9.amplifyapp.com"
+  sales_app_domain = "main.d2gaenyfpvldsl.amplifyapp.com"
 }
 
 ###############################################################################

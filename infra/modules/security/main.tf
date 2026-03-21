@@ -54,6 +54,10 @@ resource "aws_s3_bucket_lifecycle_configuration" "cloudtrail_logs" {
     id     = "expire-old-logs"
     status = "Enabled"
 
+    filter {
+      prefix = ""
+    }
+
     expiration {
       days = var.environment == "prod" ? 365 : 90
     }
