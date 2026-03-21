@@ -1,11 +1,9 @@
-// @ts-nocheck
 /**
- * Admin API helper — wraps Amplify REST API for /admin/* routes.
- * The shared api-client does not expose admin-specific endpoints,
- * so we call Amplify REST directly here.
+ * Admin API helper — uses fetch directly with Cognito JWT.
+ * Bypasses Amplify REST API to avoid "API name is invalid" config issues.
  */
 
-import { get, post, put, del } from 'aws-amplify/api';
+import { fetchAuthSession } from 'aws-amplify/auth';
 import type {
   SetUserStatusRequest,
   SetUserPackageRequest,
@@ -23,7 +21,52 @@ import type {
   FlagValue,
 } from '@keepnum/shared';
 
-const API_NAME = 'keepnumApi';
+function getApiUrl(): string {
+  return (
+    process.env.REACT_APP_API_URL ||
+    process.env.REACT_APP_API_GATEWAY_URL ||
+    ''
+  );
+}
+
+async function getAuthHeaders(): Promise<Record<string, string>> {
+  try {
+    const session = await fetchAuthSession();
+    const token = session.tokens?.accessToken?.toString();
+    return token ? { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' } : { 'Content-Type': 'application/json' };
+  } catch {
+    return { 'Content-Type': 'application/json' };
+  }
+}
+
+async function apiGet<T>(path: string, queryParams?: Record<string, string>): Promise<T> {
+  const base = getApiUrl();
+  const url = new URL(`${base}${path}`);
+  if (queryParams) Object.entries(queryParams).forEach(([k, v]) => url.searchParams.set(k, v));
+  const res = await fetch(url.toString(), { headers: await getAuthHeaders() });
+  if (!res.ok) throw new Error(`API error ${res.status}: ${await res.text()}`);
+  return res.json();
+}
+
+async function apiPost<T>(path: string, body?: unknown): Promise<T> {
+  const base = getApiUrl();
+  const res = await fetch(`${base}${path}`, { method: 'POST', headers: await getAuthHeaders(), body: body ? JSON.stringify(body) : undefined });
+  if (!res.ok) throw new Error(`API error ${res.status}: ${await res.text()}`);
+  return res.json();
+}
+
+async function apiPut<T>(path: string, body?: unknown): Promise<T> {
+  const base = getApiUrl();
+  const res = await fetch(`${base}${path}`, { method: 'PUT', headers: await getAuthHeaders(), body: body ? JSON.stringify(body) : undefined });
+  if (!res.ok) throw new Error(`API error ${res.status}: ${await res.text()}`);
+  return res.json();
+}
+
+async function apiDel(path: string): Promise<void> {
+  const base = getApiUrl();
+  const res = await fetch(`${base}${path}`, { method: 'DELETE', headers: await getAuthHeaders() });
+  if (!res.ok) throw new Error(`API error ${res.status}: ${await res.text()}`);
+}
 
 // ─── Users ────────────────────────────────────────────────────────────────────
 
@@ -35,103 +78,84 @@ export interface UserDetail extends User {
   addOns?: string[];
 }
 
-export async function listUsers(
-  search?: string,
-  page = 1,
-  limit = 20,
-): Promise<PaginatedResponse<User>> {
-  const queryParams: Record<string, string> = { page: String(page), limit: String(limit) };
-  if (search) queryParams['search'] = search;
-  const { body } = await get({ apiName: API_NAME, path: '/admin/users', options: { queryParams } }).response;
-  return body.json() as Promise<PaginatedResponse<User>>;
+export async function listUsers(search?: string, page = 1, limit = 20): Promise<PaginatedResponse<User>> {
+  const qp: Record<string, string> = { page: String(page), limit: String(limit) };
+  if (search) qp['search'] = search;
+  return apiGet('/admin/users', qp);
 }
 
 export async function getUser(userId: string): Promise<UserDetail> {
-  const { body } = await get({ apiName: API_NAME, path: `/admin/users/${userId}` }).response;
-  return body.json() as Promise<UserDetail>;
+  return apiGet(`/admin/users/${userId}`);
 }
 
 export async function setUserStatus(userId: string, req: SetUserStatusRequest): Promise<void> {
-  await put({ apiName: API_NAME, path: `/admin/users/${userId}/status`, options: { body: req as unknown as Record<string, unknown> } }).response;
+  await apiPut(`/admin/users/${userId}/status`, req);
 }
 
 export async function setUserPackage(userId: string, req: SetUserPackageRequest): Promise<void> {
-  await put({ apiName: API_NAME, path: `/admin/users/${userId}/package`, options: { body: req as unknown as Record<string, unknown> } }).response;
+  await apiPut(`/admin/users/${userId}/package`, req);
 }
 
 export async function setUserFeatureFlags(userId: string, req: SetUserFeatureFlagsRequest): Promise<void> {
-  await put({ apiName: API_NAME, path: `/admin/users/${userId}/feature-flags`, options: { body: req as unknown as Record<string, unknown> } }).response;
+  await apiPut(`/admin/users/${userId}/feature-flags`, req);
 }
 
 export async function getUserBilling(userId: string): Promise<{ invoices: Invoice[]; subscription: Subscription | null }> {
-  const { body } = await get({ apiName: API_NAME, path: `/admin/users/${userId}/billing` }).response;
-  return body.json() as Promise<{ invoices: Invoice[]; subscription: Subscription | null }>;
+  return apiGet(`/admin/users/${userId}/billing`);
 }
 
 // ─── Packages ─────────────────────────────────────────────────────────────────
 
 export async function listPackages(): Promise<Package[]> {
-  const { body } = await get({ apiName: API_NAME, path: '/admin/packages' }).response;
-  return body.json() as Promise<Package[]>;
+  return apiGet('/admin/packages');
 }
 
 export async function createPackage(req: CreatePackageRequest): Promise<Package> {
-  const { body } = await post({ apiName: API_NAME, path: '/admin/packages', options: { body: req as any } }).response;
-  return body.json() as Promise<Package>;
+  return apiPost('/admin/packages', req);
 }
 
 export async function updatePackage(packageId: string, req: Partial<CreatePackageRequest>): Promise<Package> {
-  const { body } = await put({ apiName: API_NAME, path: `/admin/packages/${packageId}`, options: { body: req as any } }).response;
-  return body.json() as Promise<Package>;
+  return apiPut(`/admin/packages/${packageId}`, req);
 }
 
 export async function deletePackage(packageId: string): Promise<void> {
-  await del({ apiName: API_NAME, path: `/admin/packages/${packageId}` }).response;
+  await apiDel(`/admin/packages/${packageId}`);
 }
 
 // ─── Feature Flags ────────────────────────────────────────────────────────────
 
 export async function getFeatureFlagDefaults(): Promise<FeatureFlag[]> {
-  const { body } = await get({ apiName: API_NAME, path: '/admin/feature-flags/defaults' }).response;
-  return body.json() as Promise<FeatureFlag[]>;
+  return apiGet('/admin/feature-flags/defaults');
 }
 
 export async function updateFeatureFlagDefaults(flags: Record<string, FlagValue>): Promise<void> {
-  await put({ apiName: API_NAME, path: '/admin/feature-flags/defaults', options: { body: flags as unknown as Record<string, unknown> } }).response;
+  await apiPut('/admin/feature-flags/defaults', flags);
 }
 
 // ─── Audit Log ────────────────────────────────────────────────────────────────
 
-export async function getAuditLog(params?: {
-  userId?: string;
-  from?: string;
-  to?: string;
-}): Promise<AdminAuditLog[]> {
-  const queryParams: Record<string, string> = {};
-  if (params?.userId) queryParams['userId'] = params.userId;
-  if (params?.from) queryParams['from'] = params.from;
-  if (params?.to) queryParams['to'] = params.to;
-  const { body } = await get({ apiName: API_NAME, path: '/admin/audit-log', options: { queryParams } }).response;
-  return body.json() as unknown as Promise<AdminAuditLog[]>;
+export async function getAuditLog(params?: { userId?: string; from?: string; to?: string }): Promise<AdminAuditLog[]> {
+  const qp: Record<string, string> = {};
+  if (params?.userId) qp['userId'] = params.userId;
+  if (params?.from) qp['from'] = params.from;
+  if (params?.to) qp['to'] = params.to;
+  return apiGet('/admin/audit-log', qp);
 }
 
 // ─── Greetings Marketplace ────────────────────────────────────────────────────
 
 export async function listAdminGreetings(): Promise<any[]> {
-  const { body } = await get({ apiName: API_NAME, path: '/admin/greetings' }).response;
-  return body.json() as Promise<any[]>;
+  return apiGet('/admin/greetings');
 }
 
 export async function createAdminGreeting(req: { name: string; category: string; audioUrl: string; voiceTalent?: string }): Promise<any> {
-  const { body } = await post({ apiName: API_NAME, path: '/admin/greetings', options: { body: req as any } }).response;
-  return body.json() as Promise<any>;
+  return apiPost('/admin/greetings', req);
 }
 
 export async function updateAdminGreeting(id: string, req: { name?: string; category?: string; audioUrl?: string; voiceTalent?: string }): Promise<any> {
-  const { body } = await put({ apiName: API_NAME, path: `/admin/greetings/${id}`, options: { body: req as any } }).response;
-  return body.json() as Promise<any>;
+  return apiPut(`/admin/greetings/${id}`, req);
 }
 
 export async function deleteAdminGreeting(id: string): Promise<void> {
-  await del({ apiName: API_NAME, path: `/admin/greetings/${id}` }).response;
+  await apiDel(`/admin/greetings/${id}`);
 }
