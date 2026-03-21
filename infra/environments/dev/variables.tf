@@ -111,7 +111,14 @@ variable "repository_url" {
 }
 
 variable "github_access_token" {
-  description = "GitHub personal access token for Amplify"
+  description = "GitHub personal access token for Amplify (deprecated — use GitHub App integration)"
   type        = string
   sensitive   = true
+  default     = ""
+}
+
+variable "custom_domain" {
+  description = "Custom domain for Amplify apps (e.g. keepnum.com)"
+  type        = string
+  default     = ""
 }

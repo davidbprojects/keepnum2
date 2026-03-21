@@ -159,6 +159,7 @@ module "amplify" {
   api_gateway_url      = module.api_gateway.api_gateway_url
   aws_region           = var.aws_region
   waf_web_acl_arn      = module.waf.web_acl_arn
+  custom_domain        = var.custom_domain
 
   # CloudWatch RUM
   rum_identity_pool_id     = module.cloudwatch_rum.identity_pool_id

@@ -42,3 +42,18 @@ output "sales_app_raw_domain" {
   description = "Raw default domain for the sales landing page"
   value       = aws_amplify_app.sales.default_domain
 }
+
+output "web_custom_domain_dns" {
+  description = "DNS verification records for web app custom domain"
+  value       = var.custom_domain != "" ? aws_amplify_domain_association.web[0].certificate_verification_dns_record : ""
+}
+
+output "admin_custom_domain_dns" {
+  description = "DNS verification records for admin app custom domain"
+  value       = var.custom_domain != "" ? aws_amplify_domain_association.admin[0].certificate_verification_dns_record : ""
+}
+
+output "sales_custom_domain_dns" {
+  description = "DNS verification records for sales app custom domain"
+  value       = var.custom_domain != "" ? aws_amplify_domain_association.sales[0].certificate_verification_dns_record : ""
+}

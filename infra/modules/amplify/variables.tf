@@ -14,9 +14,10 @@ variable "repository_url" {
 }
 
 variable "github_access_token" {
-  description = "GitHub personal access token for Amplify to access the repository"
+  description = "GitHub personal access token for Amplify (deprecated — use GitHub App integration)"
   type        = string
   sensitive   = true
+  default     = ""
 }
 
 variable "cognito_user_pool_id" {
@@ -71,6 +72,12 @@ variable "rum_sales_app_monitor_id" {
 
 variable "rum_guest_role_arn" {
   description = "IAM role ARN for unauthenticated RUM access"
+  type        = string
+  default     = ""
+}
+
+variable "custom_domain" {
+  description = "Custom domain name for Amplify apps (e.g. keepnum.com). Leave empty to skip custom domain setup."
   type        = string
   default     = ""
 }

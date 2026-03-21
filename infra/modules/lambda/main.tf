@@ -590,7 +590,7 @@ resource "aws_lambda_function" "this" {
   description   = each.value.description
   role          = aws_iam_role.lambda[each.key].arn
 
-  runtime     = "nodejs18.x"
+  runtime     = "nodejs22.x"
   handler     = "index.handler"
   timeout     = each.value.timeout
   memory_size = each.value.memory

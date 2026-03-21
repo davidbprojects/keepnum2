@@ -6,7 +6,7 @@ resource "aws_amplify_app" "web" {
   name       = "${var.project_name}-${var.environment}-web"
   repository = var.repository_url
 
-  oauth_token = var.github_access_token
+  # GitHub App integration managed via AWS Console — no oauth_token needed
 
   environment_variables = {
     REACT_APP_COGNITO_USER_POOL_ID = var.cognito_user_pool_id
@@ -67,7 +67,7 @@ resource "aws_amplify_app" "admin" {
   name       = "${var.project_name}-${var.environment}-admin"
   repository = var.repository_url
 
-  oauth_token = var.github_access_token
+  # GitHub App integration managed via AWS Console — no oauth_token needed
 
   environment_variables = {
     REACT_APP_COGNITO_USER_POOL_ID = var.cognito_user_pool_id
@@ -128,7 +128,7 @@ resource "aws_amplify_app" "sales" {
   name       = "${var.project_name}-${var.environment}-sales"
   repository = var.repository_url
 
-  oauth_token = var.github_access_token
+  # GitHub App integration managed via AWS Console — no oauth_token needed
 
   environment_variables = {
     REACT_APP_API_URL              = var.api_gateway_url
@@ -180,20 +180,57 @@ resource "aws_amplify_branch" "sales_main" {
 }
 
 ###############################################################################
-# WAF Association — protect all three Amplify apps
-# Requirements: 13.3, 14.5, 18.7
+# WAF Association — Amplify uses CloudFront under the hood, WAF association
+# requires us-east-1 WebACL. Skipped for regional deployments.
 ###############################################################################
-resource "aws_wafv2_web_acl_association" "web" {
-  resource_arn = aws_amplify_app.web.arn
-  web_acl_arn  = var.waf_web_acl_arn
+
+###############################################################################
+# Custom Domains — keepnum.com
+###############################################################################
+
+# app.keepnum.com → web app
+resource "aws_amplify_domain_association" "web" {
+  count = var.custom_domain != "" ? 1 : 0
+
+  app_id                = aws_amplify_app.web.id
+  domain_name           = var.custom_domain
+  wait_for_verification = false
+
+  sub_domain {
+    branch_name = aws_amplify_branch.web_main.branch_name
+    prefix      = "app"
+  }
 }
 
-resource "aws_wafv2_web_acl_association" "admin" {
-  resource_arn = aws_amplify_app.admin.arn
-  web_acl_arn  = var.waf_web_acl_arn
+# admin.keepnum.com → admin app
+resource "aws_amplify_domain_association" "admin" {
+  count = var.custom_domain != "" ? 1 : 0
+
+  app_id                = aws_amplify_app.admin.id
+  domain_name           = var.custom_domain
+  wait_for_verification = false
+
+  sub_domain {
+    branch_name = aws_amplify_branch.admin_main.branch_name
+    prefix      = "admin"
+  }
 }
 
-resource "aws_wafv2_web_acl_association" "sales" {
-  resource_arn = aws_amplify_app.sales.arn
-  web_acl_arn  = var.waf_web_acl_arn
+# keepnum.com + www.keepnum.com → sales landing page
+resource "aws_amplify_domain_association" "sales" {
+  count = var.custom_domain != "" ? 1 : 0
+
+  app_id                = aws_amplify_app.sales.id
+  domain_name           = var.custom_domain
+  wait_for_verification = false
+
+  sub_domain {
+    branch_name = aws_amplify_branch.sales_main.branch_name
+    prefix      = ""
+  }
+
+  sub_domain {
+    branch_name = aws_amplify_branch.sales_main.branch_name
+    prefix      = "www"
+  }
 }
