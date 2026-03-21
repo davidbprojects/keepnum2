@@ -17,6 +17,11 @@ import VirtualNumbersScreen from '../screens/VirtualNumbersScreen';
 import UnifiedInboxScreen from '../screens/UnifiedInboxScreen';
 import ConferenceScreen from '../screens/ConferenceScreen';
 import SettingsExtScreen from '../screens/SettingsExtScreen';
+import IvrMenuScreen from '../screens/IvrMenuScreen';
+import AutoReplyScreen from '../screens/AutoReplyScreen';
+import PrivacyScanScreen from '../screens/PrivacyScanScreen';
+import RecordingsScreen from '../screens/RecordingsScreen';
+import GreetingsMarketplaceScreen from '../screens/GreetingsMarketplaceScreen';
 
 export type RootStackParamList = {
   Login: undefined;
@@ -28,6 +33,11 @@ export type RootStackParamList = {
   UnifiedInbox: undefined;
   Conference: undefined;
   SettingsExt: undefined;
+  IvrMenus: undefined;
+  AutoReply: undefined;
+  PrivacyScan: undefined;
+  Recordings: undefined;
+  GreetingsMarketplace: undefined;
   SmsLog: undefined;
   CallLog: undefined;
   SpamLog: undefined;
@@ -65,6 +75,11 @@ const AppNavigator: React.FC = () => {
           <Stack.Screen name="Billing" component={BillingScreen} />
           <Stack.Screen name="Settings" component={SettingsScreen} />
           <Stack.Screen name="SettingsExt" component={SettingsExtScreen} options={{ title: 'Advanced Settings' }} />
+          <Stack.Screen name="IvrMenus" component={IvrMenuScreen} options={{ title: 'IVR Menus' }} />
+          <Stack.Screen name="AutoReply" component={AutoReplyScreen} options={{ title: 'Auto-Reply' }} />
+          <Stack.Screen name="PrivacyScan" component={PrivacyScanScreen} options={{ title: 'Privacy Scan' }} />
+          <Stack.Screen name="Recordings" component={RecordingsScreen} options={{ title: 'Recordings' }} />
+          <Stack.Screen name="GreetingsMarketplace" component={GreetingsMarketplaceScreen} options={{ title: 'Greetings' }} />
         </>
       ) : (
         <Stack.Screen name="Login" component={LoginScreen} options={{ headerShown: false }} />

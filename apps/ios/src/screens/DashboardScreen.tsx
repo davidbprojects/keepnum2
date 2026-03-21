@@ -66,6 +66,11 @@ const DashboardScreen: React.FC<Props> = ({ navigation }) => {
     { label: 'SMS Log', screen: 'SmsLog' as const },
     { label: 'Call Log', screen: 'CallLog' as const },
     { label: 'Spam Log', screen: 'SpamLog' as const },
+    { label: 'IVR Menus', screen: 'IvrMenus' as const },
+    { label: 'Auto-Reply', screen: 'AutoReply' as const },
+    { label: 'Privacy Scan', screen: 'PrivacyScan' as const },
+    { label: 'Recordings', screen: 'Recordings' as const },
+    { label: 'Greetings', screen: 'GreetingsMarketplace' as const },
     { label: 'Billing', screen: 'Billing' as const },
   ];
 
