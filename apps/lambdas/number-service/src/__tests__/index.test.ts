@@ -23,6 +23,8 @@ jest.mock('@keepnum/shared', () => {
     assertFlag: jest.fn().mockResolvedValue(null),
     assertNumericLimit: jest.fn().mockResolvedValue(null),
     resolveFlag: jest.fn().mockResolvedValue(true),
+    logger: { debug: jest.fn(), info: jest.fn(), warn: jest.fn(), error: jest.fn(), auth: jest.fn(), request: jest.fn() },
+    initLogger: jest.fn(),
   };
 });
 

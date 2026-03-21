@@ -14,6 +14,7 @@ import {
   makeTtl,
 } from '@keepnum/shared';
 import type { SmsLogItem, SmsLogStatus, SpamLogItem } from '@keepnum/shared';
+import { logger, initLogger } from '@keepnum/shared';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -285,7 +286,7 @@ async function storeMmsMedia(
       // Download media from Telnyx-provided URL
       const mediaResponse = await fetch(item.url);
       if (!mediaResponse.ok) {
-        console.warn(`Failed to download media from ${item.url}: ${mediaResponse.status}`);
+        logger.warn(`Failed to download media from ${item.url}: ${mediaResponse.status}`);
         continue;
       }
       const mediaBuffer = await mediaResponse.arrayBuffer();
@@ -361,7 +362,7 @@ export async function handler(
     // Look up the parked number
     const owner = await lookupParkedNumber(toNumber);
     if (!owner) {
-      console.warn(`No parked number found for ${toNumber}`);
+      logger.warn(`No parked number found for ${toNumber}`);
       return json(200, { message: 'Number not parked' });
     }
 
@@ -406,7 +407,7 @@ export async function handler(
         try {
           await forwardViaSms(toNumber, destination, text, apiKey);
         } catch (err) {
-          console.error('SMS forwarding failed:', err);
+          logger.error('SMS forwarding failed', err);
           forwardingFailed = true;
           errors.push('sms');
         }
@@ -418,7 +419,7 @@ export async function handler(
       try {
         await forwardViaEmail(owner.userEmail, sender, toNumber, text);
       } catch (err) {
-        console.error('Email forwarding failed:', err);
+        logger.error('Email forwarding failed', err);
         forwardingFailed = true;
         errors.push('email');
       }
@@ -435,7 +436,7 @@ export async function handler(
         mediaKeys,
       );
       await writeSmsLog(owner.userId, owner.numberId, messageId, sender, toNumber, 'failed');
-      console.warn(`SMS forwarding failed for message ${messageId}: ${errors.join(', ')}`);
+      logger.warn(`SMS forwarding failed for message ${messageId}: ${errors.join(', ')}`);
       return json(200, { message: 'Forwarding failed, message stored', status: 'failed' });
     }
 
@@ -444,7 +445,7 @@ export async function handler(
 
     return json(200, { message: 'SMS processed', status: 'delivered' });
   } catch (err) {
-    console.error('SMS service error:', err);
+    logger.error('SMS service error', err);
     return json(500, { error: 'Internal server error' });
   }
 }

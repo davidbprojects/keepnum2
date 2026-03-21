@@ -13,6 +13,7 @@ import type {
   LoginRequest,
   RefreshRequest,
 } from '@keepnum/shared';
+import { logger, initLogger } from '@keepnum/shared';
 
 // ─── Clients (initialised once per cold start) ──────────────────────────────
 
@@ -83,8 +84,10 @@ async function handleRegister(body: RegisterRequest): Promise<APIGatewayProxyRes
       [cognitoSub, body.email],
     );
 
+    logger.auth('register_success', cognitoSub, { email: body.email });
     return json(201, { message: 'User registered successfully' });
-  } catch {
+  } catch (err) {
+    logger.error('register_failed', err, { email: body.email });
     return json(400, { error: AUTH_ERROR });
   }
 }
@@ -102,11 +105,14 @@ async function handleLogin(body: LoginRequest): Promise<APIGatewayProxyResult> {
       }),
     );
 
+    logger.auth('login_success', undefined, { email: body.email });
     return json(200, {
       accessToken: result.AuthenticationResult?.AccessToken ?? '',
       refreshToken: result.AuthenticationResult?.RefreshToken ?? '',
     });
-  } catch {
+  } catch (err) {
+    logger.auth('login_failed', undefined, { email: body.email });
+    logger.error('login_error', err);
     // Never reveal which field is wrong (Req 1.3)
     return json(401, { error: AUTH_ERROR });
   }
@@ -210,6 +216,9 @@ export async function handler(
   event: APIGatewayProxyEvent,
 ): Promise<APIGatewayProxyResult> {
   const { httpMethod, path } = event;
+  const requestId = event.requestContext.requestId;
+  initLogger('auth-service', requestId);
+  const start = Date.now();
 
   try {
     if (httpMethod === 'POST' && path === '/auth/register') {
@@ -247,7 +256,8 @@ export async function handler(
     }
 
     return json(404, { error: 'Not found' });
-  } catch {
+  } catch (err) {
+    logger.error('auth_handler_error', err, { method: httpMethod, path });
     return json(500, { error: 'Internal server error' });
   }
 }

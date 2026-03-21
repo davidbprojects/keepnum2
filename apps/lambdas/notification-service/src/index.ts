@@ -5,6 +5,7 @@ import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient, PutCommand, DeleteCommand, QueryCommand, GetCommand } from '@aws-sdk/lib-dynamodb';
 import { Pool } from 'pg';
 import { assertFlag } from '@keepnum/shared';
+import { logger, initLogger } from '@keepnum/shared';
 
 const ssm = new SSMClient({});
 const sns = new SNSClient({});
@@ -56,7 +57,7 @@ async function handleRegisterDevice(event: APIGatewayProxyEvent, dbUserId: strin
     }));
     endpointArn = result.EndpointArn ?? '';
   } catch (err) {
-    console.error('SNS endpoint creation failed:', err);
+    logger.error('SNS endpoint creation failed', err);
     return json(502, { error: 'Failed to register device' });
   }
 
@@ -144,7 +145,7 @@ async function handleInternalVoicemailNotification(event: APIGatewayProxyEvent):
           }));
           break;
         } catch (err) {
-          if (attempt === MAX_RETRIES - 1) console.error('Push notification failed after retries:', err);
+          if (attempt === MAX_RETRIES - 1) logger.error('Push notification failed after retries', err);
           else await new Promise((r) => setTimeout(r, Math.pow(2, attempt) * 1000));
         }
       }
@@ -194,7 +195,7 @@ export async function handler(event: APIGatewayProxyEvent): Promise<APIGatewayPr
 
     return json(404, { error: 'Not found' });
   } catch (err) {
-    console.error('Unhandled error:', err);
+    logger.error('Unhandled error', err);
     return json(500, { error: 'Internal server error' });
   }
 }

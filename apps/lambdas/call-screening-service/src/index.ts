@@ -2,6 +2,7 @@ import type { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
 import { SSMClient, GetParameterCommand } from '@aws-sdk/client-ssm';
 import { Pool } from 'pg';
 import { assertFlag } from '@keepnum/shared';
+import { logger, initLogger } from '@keepnum/shared';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -242,7 +243,7 @@ export async function handler(
 
     return json(200, result);
   } catch (err) {
-    console.error('Call screening error:', err);
+    logger.error('Call screening error', err);
     return json(500, { error: 'Internal server error' });
   }
 }

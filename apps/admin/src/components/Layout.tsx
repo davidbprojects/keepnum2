@@ -42,6 +42,7 @@ const Layout: React.FC = () => {
         <Link to="/feature-flags" style={linkStyle}>Feature Flags</Link>
         <Link to="/greetings" style={linkStyle}>Greetings</Link>
         <Link to="/audit-log" style={linkStyle}>Audit Log</Link>
+        <Link to="/logs" style={linkStyle}>Logs</Link>
         <div style={{ marginLeft: 'auto' }}>
           <Button label="Sign Out" variant="ghost" size="sm" onClick={signOut} />
         </div>

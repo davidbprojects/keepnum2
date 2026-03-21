@@ -2,6 +2,7 @@ import type { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
 import { SSMClient, GetParameterCommand } from '@aws-sdk/client-ssm';
 import { Pool } from 'pg';
 import { assertFlag } from '@keepnum/shared';
+import { logger, initLogger } from '@keepnum/shared';
 
 const ssm = new SSMClient({});
 const pool = new Pool({
@@ -117,7 +118,7 @@ export async function handler(event: APIGatewayProxyEvent): Promise<APIGatewayPr
 
     return json(404, { error: 'Not found' });
   } catch (err) {
-    console.error('Unhandled error:', err);
+    logger.error('Unhandled error', err);
     return json(500, { error: 'Internal server error' });
   }
 }

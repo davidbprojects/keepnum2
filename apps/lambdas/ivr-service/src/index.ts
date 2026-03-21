@@ -3,6 +3,7 @@ import { SSMClient, GetParameterCommand } from '@aws-sdk/client-ssm';
 import { Pool } from 'pg';
 import { assertFlag } from '@keepnum/shared';
 import type { IvrActionType } from '@keepnum/shared';
+import { logger, initLogger } from '@keepnum/shared';
 
 const ssm = new SSMClient({});
 const pool = new Pool({
@@ -74,7 +75,7 @@ async function handleCreateMenu(event: APIGatewayProxyEvent, dbUserId: string): 
     return json(201, menu);
   } catch (err) {
     await client.query('ROLLBACK');
-    console.error('Create IVR menu failed:', err);
+    logger.error('Create IVR menu failed', err);
     return json(500, { error: 'Failed to create IVR menu' });
   } finally { client.release(); }
 }
@@ -120,7 +121,7 @@ async function handleUpdateMenu(event: APIGatewayProxyEvent, dbUserId: string, i
     return json(200, { message: 'IVR menu updated' });
   } catch (err) {
     await client.query('ROLLBACK');
-    console.error('Update IVR menu failed:', err);
+    logger.error('Update IVR menu failed', err);
     return json(500, { error: 'Failed to update IVR menu' });
   } finally { client.release(); }
 }
@@ -230,7 +231,7 @@ export async function handler(event: APIGatewayProxyEvent): Promise<APIGatewayPr
 
     return json(404, { error: 'Not found' });
   } catch (err) {
-    console.error('Unhandled error:', err);
+    logger.error('Unhandled error', err);
     return json(500, { error: 'Internal server error' });
   }
 }

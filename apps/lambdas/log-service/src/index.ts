@@ -17,6 +17,7 @@ import type {
   CallLogQueryParams,
   SmsLogQueryParams,
 } from '@keepnum/shared';
+import { logger, initLogger } from '@keepnum/shared';
 
 // ─── Clients (initialised once per cold start) ──────────────────────────────
 
@@ -326,7 +327,7 @@ export async function handler(
 
     return json(404, { error: 'Not found' });
   } catch (err) {
-    console.error('Log service error:', err);
+    logger.error('Log service error', err);
     return json(500, { error: 'Internal server error' });
   }
 }

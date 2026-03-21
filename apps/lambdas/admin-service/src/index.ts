@@ -18,6 +18,12 @@ import type {
   Package,
   FlagValue,
 } from '@keepnum/shared';
+import { logger, initLogger } from '@keepnum/shared';
+import {
+  CloudWatchLogsClient,
+  StartQueryCommand,
+  GetQueryResultsCommand,
+} from '@aws-sdk/client-cloudwatch-logs';
 
 // ─── Clients (initialised once per cold start) ──────────────────────────────
 
@@ -31,6 +37,8 @@ const pool = new Pool({
 });
 
 const USER_POOL_ID = process.env.USER_POOL_ID!;
+const cwLogs = new CloudWatchLogsClient({});
+const LOG_GROUP_PREFIX = process.env.LOG_GROUP_PREFIX ?? '/aws/lambda/keepnum-dev';
 
 // ─── Response helpers ────────────────────────────────────────────────────────
 
@@ -707,6 +715,169 @@ async function deleteAdminGreeting(event: APIGatewayProxyEvent): Promise<APIGate
   return json(200, { message: 'Greeting deleted' });
 }
 
+// ─── GET /admin/logs — query CloudWatch Logs across all services ─────────────
+
+async function queryLogs(event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> {
+  const qs = event.queryStringParameters ?? {};
+  const service = qs.service; // optional: filter to specific service
+  const level = qs.level;     // optional: DEBUG, INFO, WARN, ERROR
+  const search = qs.search;   // optional: free-text search
+  const from = qs.from;       // ISO timestamp or relative like '1h', '24h'
+  const to = qs.to;           // ISO timestamp, defaults to now
+  const limit = Math.min(parseInt(qs.limit ?? '100', 10), 500);
+
+  // Determine time range
+  const endTime = to ? new Date(to).getTime() : Date.now();
+  let startTime: number;
+  if (from && /^\d+[hmd]$/.test(from)) {
+    const unit = from.slice(-1);
+    const val = parseInt(from.slice(0, -1), 10);
+    const ms = unit === 'h' ? val * 3600000 : unit === 'm' ? val * 60000 : val * 86400000;
+    startTime = endTime - ms;
+  } else if (from) {
+    startTime = new Date(from).getTime();
+  } else {
+    startTime = endTime - 3600000; // default: last 1 hour
+  }
+
+  // Build CloudWatch Insights query
+  const logGroupNames = service
+    ? [`${LOG_GROUP_PREFIX}-${service}`]
+    : [
+        `${LOG_GROUP_PREFIX}-auth`,
+        `${LOG_GROUP_PREFIX}-admin`,
+        `${LOG_GROUP_PREFIX}-number`,
+        `${LOG_GROUP_PREFIX}-billing`,
+        `${LOG_GROUP_PREFIX}-voicemail`,
+        `${LOG_GROUP_PREFIX}-sms`,
+        `${LOG_GROUP_PREFIX}-call`,
+        `${LOG_GROUP_PREFIX}-log`,
+        `${LOG_GROUP_PREFIX}-call-screening`,
+        `${LOG_GROUP_PREFIX}-spam-filter`,
+        `${LOG_GROUP_PREFIX}-notification`,
+        `${LOG_GROUP_PREFIX}-download`,
+        `${LOG_GROUP_PREFIX}-auto-reply`,
+        `${LOG_GROUP_PREFIX}-caller-id`,
+        `${LOG_GROUP_PREFIX}-conference`,
+        `${LOG_GROUP_PREFIX}-ivr`,
+        `${LOG_GROUP_PREFIX}-privacy-scan`,
+        `${LOG_GROUP_PREFIX}-retention-job`,
+        `${LOG_GROUP_PREFIX}-unified-inbox`,
+        `${LOG_GROUP_PREFIX}-virtual-number`,
+      ];
+
+  let query = 'fields @timestamp, @message, @logStream';
+  const filters: string[] = [];
+  if (level) filters.push(`@message like /"level":"${level}"/`);
+  if (search) filters.push(`@message like /${search}/`);
+  if (filters.length > 0) query += ` | filter ${filters.join(' and ')}`;
+  query += ` | sort @timestamp desc | limit ${limit}`;
+
+  try {
+    const startResult = await cwLogs.send(new StartQueryCommand({
+      logGroupNames,
+      startTime: Math.floor(startTime / 1000),
+      endTime: Math.floor(endTime / 1000),
+      queryString: query,
+      limit,
+    }));
+
+    const queryId = startResult.queryId!;
+
+    // Poll for results (max 10 seconds)
+    let status = 'Running';
+    let results: Record<string, string>[][] = [];
+    for (let i = 0; i < 20 && (status === 'Running' || status === 'Scheduled'); i++) {
+      await new Promise(r => setTimeout(r, 500));
+      const getResult = await cwLogs.send(new GetQueryResultsCommand({ queryId }));
+      status = getResult.status ?? 'Complete';
+      if (getResult.results) {
+        results = getResult.results as any;
+      }
+    }
+
+    // Parse results into structured log entries
+    const items = results.map(row => {
+      const entry: Record<string, string> = {};
+      for (const field of row) {
+        if (field.field && field.value) {
+          entry[field.field.replace('@', '')] = field.value;
+        }
+      }
+      // Try to parse the JSON message
+      try {
+        const parsed = JSON.parse(entry.message || '{}');
+        return { ...entry, ...parsed };
+      } catch {
+        return entry;
+      }
+    });
+
+    return json(200, { items, count: items.length, status });
+  } catch (err) {
+    logger.error('cloudwatch_query_failed', err);
+    return json(500, { error: 'Failed to query logs' });
+  }
+}
+
+// ─── GET /admin/logs/auth — auth-specific log query ──────────────────────────
+
+async function queryAuthLogs(event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> {
+  const qs = event.queryStringParameters ?? {};
+  const from = qs.from ?? '24h';
+  const limit = Math.min(parseInt(qs.limit ?? '100', 10), 500);
+
+  const endTime = Date.now();
+  let startTime: number;
+  if (/^\d+[hmd]$/.test(from)) {
+    const unit = from.slice(-1);
+    const val = parseInt(from.slice(0, -1), 10);
+    const ms = unit === 'h' ? val * 3600000 : unit === 'm' ? val * 60000 : val * 86400000;
+    startTime = endTime - ms;
+  } else {
+    startTime = new Date(from).getTime();
+  }
+
+  const query = `fields @timestamp, @message
+    | filter @message like /"action":"auth:/
+    | sort @timestamp desc
+    | limit ${limit}`;
+
+  try {
+    const startResult = await cwLogs.send(new StartQueryCommand({
+      logGroupNames: [`${LOG_GROUP_PREFIX}-auth`],
+      startTime: Math.floor(startTime / 1000),
+      endTime: Math.floor(endTime / 1000),
+      queryString: query,
+      limit,
+    }));
+
+    const queryId = startResult.queryId!;
+    let status = 'Running';
+    let results: Record<string, string>[][] = [];
+    for (let i = 0; i < 20 && (status === 'Running' || status === 'Scheduled'); i++) {
+      await new Promise(r => setTimeout(r, 500));
+      const getResult = await cwLogs.send(new GetQueryResultsCommand({ queryId }));
+      status = getResult.status ?? 'Complete';
+      if (getResult.results) results = getResult.results as any;
+    }
+
+    const items = results.map(row => {
+      const entry: Record<string, string> = {};
+      for (const field of row) {
+        if (field.field && field.value) entry[field.field.replace('@', '')] = field.value;
+      }
+      try { return { ...entry, ...JSON.parse(entry.message || '{}') }; }
+      catch { return entry; }
+    });
+
+    return json(200, { items, count: items.length });
+  } catch (err) {
+    logger.error('auth_log_query_failed', err);
+    return json(500, { error: 'Failed to query auth logs' });
+  }
+}
+
 // ─── Main handler ────────────────────────────────────────────────────────────
 
 export async function handler(
@@ -714,6 +885,7 @@ export async function handler(
 ): Promise<APIGatewayProxyResult> {
   const method = event.httpMethod;
   const path = event.resource ?? event.path ?? '';
+  initLogger('admin-service', event.requestContext.requestId);
 
   try {
     // Public endpoint — no auth required
@@ -785,6 +957,14 @@ export async function handler(
     }
     if (method === 'DELETE' && path.match(/^\/admin\/greetings\/[^/]+$/)) {
       return await deleteAdminGreeting(event);
+    }
+
+    // ── Application logs (CloudWatch) ──
+    if (method === 'GET' && path === '/admin/logs') {
+      return await queryLogs(event);
+    }
+    if (method === 'GET' && path === '/admin/logs/auth') {
+      return await queryAuthLogs(event);
     }
 
     return json(404, { error: 'Not found' });

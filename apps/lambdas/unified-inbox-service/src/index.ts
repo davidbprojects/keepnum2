@@ -3,6 +3,7 @@ import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient, QueryCommand } from '@aws-sdk/lib-dynamodb';
 import { Pool } from 'pg';
 import { assertFlag } from '@keepnum/shared';
+import { logger, initLogger } from '@keepnum/shared';
 
 const ddbClient = new DynamoDBClient({});
 const ddb = DynamoDBDocumentClient.from(ddbClient);
@@ -125,7 +126,7 @@ export async function handler(event: APIGatewayProxyEvent): Promise<APIGatewayPr
 
     return json(404, { error: 'Not found' });
   } catch (err) {
-    console.error('Unhandled error:', err);
+    logger.error('Unhandled error', err);
     return json(500, { error: 'Internal server error' });
   }
 }

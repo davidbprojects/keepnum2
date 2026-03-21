@@ -25,6 +25,8 @@ jest.mock('@aws-sdk/client-ses', () => ({
 
 jest.mock('@keepnum/shared', () => ({
   resolveFlag: jest.fn().mockResolvedValue(true),
+  logger: { debug: jest.fn(), info: jest.fn(), warn: jest.fn(), error: jest.fn(), auth: jest.fn(), request: jest.fn() },
+  initLogger: jest.fn(),
 }));
 
 // ─── Imports ─────────────────────────────────────────────────────────────────

@@ -9,6 +9,7 @@ import type {
   UpdateSubscriptionRequest,
 } from '@keepnum/shared';
 import type { SubscriptionStatus, InvoiceStatus } from '@keepnum/shared';
+import { logger, initLogger } from '@keepnum/shared';
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -701,7 +702,7 @@ export async function handler(
 
     return json(404, { error: 'Not found' });
   } catch (err) {
-    console.error('Billing service error:', err);
+    logger.error('Billing service error', err);
     return json(500, { error: 'Internal server error' });
   }
 }

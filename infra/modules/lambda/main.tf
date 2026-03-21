@@ -511,6 +511,33 @@ resource "aws_iam_role_policy" "cognito" {
 }
 
 ###############################################################################
+# CloudWatch Logs read policy — for admin-service to query logs
+###############################################################################
+resource "aws_iam_role_policy" "cloudwatch_logs_read" {
+  count = contains(keys(local.lambda_functions), "admin-service") ? 1 : 0
+
+  name = "cloudwatch-logs-read"
+  role = aws_iam_role.lambda["admin-service"].id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "logs:StartQuery",
+          "logs:GetQueryResults",
+          "logs:DescribeLogGroups",
+          "logs:DescribeLogStreams",
+          "logs:GetLogEvents"
+        ]
+        Resource = "arn:aws:logs:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:log-group:/aws/lambda/${var.project_name}-${var.environment}-*:*"
+      }
+    ]
+  })
+}
+
+###############################################################################
 # Lambda invoke policy — for functions that invoke other Lambdas
 ###############################################################################
 resource "aws_iam_role_policy" "lambda_invoke" {

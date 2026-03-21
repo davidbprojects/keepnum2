@@ -16,6 +16,7 @@ import {
   makeTtl,
 } from '@keepnum/shared';
 import type { SpamCheckResult, SpamLogItem } from '@keepnum/shared';
+import { logger, initLogger } from '@keepnum/shared';
 
 // ─── Clients (initialised once per cold start) ──────────────────────────────
 
@@ -227,7 +228,7 @@ export async function handler(
 
     return json(404, { error: 'Not found' });
   } catch (err) {
-    console.error('Unhandled error:', err);
+    logger.error('Unhandled error', err);
     return json(500, { error: 'Internal server error' });
   }
 }

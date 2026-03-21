@@ -22,6 +22,7 @@ import type {
   SetTierActionsRequest,
 } from '@keepnum/shared';
 import type { RetentionPolicy } from '@keepnum/shared';
+import { logger, initLogger } from '@keepnum/shared';
 
 // ─── Clients (initialised once per cold start) ──────────────────────────────
 
@@ -241,7 +242,7 @@ async function handleProvisionNumber(
     return json(201, { id: rows[0].id, phoneNumber: provisioned.phone_number });
   } catch (err) {
     await client.query('ROLLBACK');
-    console.error('Provision error:', err);
+    logger.error('Provision error', err);
     return json(500, { error: 'Failed to provision number' });
   } finally {
     client.release();
@@ -285,10 +286,10 @@ async function handleDeleteNumber(
       },
     );
     if (!res.ok) {
-      console.warn(`Telnyx release failed for ${number.telnyx_number_id}: ${res.status}`);
+      logger.warn(`Telnyx release failed for ${number.telnyx_number_id}: ${res.status}`);
     }
   } catch (err) {
-    console.warn(`Telnyx release error for ${number.telnyx_number_id}:`, err);
+    logger.warn(`Telnyx release error for ${number.telnyx_number_id}`, { err: String(err) });
   }
 
   await pool.query(
@@ -923,7 +924,7 @@ export async function handler(
 
     return json(404, { error: 'Not found' });
   } catch (err) {
-    console.error('Unhandled error:', err);
+    logger.error('Unhandled error', err);
     return json(500, { error: 'Internal server error' });
   }
 }

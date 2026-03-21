@@ -18,6 +18,8 @@ jest.mock('@aws-sdk/client-ssm', () => ({
 
 jest.mock('@keepnum/shared', () => ({
   assertFlag: jest.fn().mockResolvedValue(null),
+  logger: { debug: jest.fn(), info: jest.fn(), warn: jest.fn(), error: jest.fn(), auth: jest.fn(), request: jest.fn() },
+  initLogger: jest.fn(),
 }));
 
 // ─── Imports ─────────────────────────────────────────────────────────────────

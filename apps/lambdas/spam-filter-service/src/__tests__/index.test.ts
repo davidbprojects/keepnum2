@@ -35,6 +35,8 @@ jest.mock('@keepnum/shared', () => ({
   makeSpamLogPk: jest.fn((userId: string) => userId),
   makeSpamLogSk: jest.fn((ts: string, id: string) => `${ts}#${id}`),
   makeTtl: jest.fn(() => 9999999999),
+  logger: { debug: jest.fn(), info: jest.fn(), warn: jest.fn(), error: jest.fn(), auth: jest.fn(), request: jest.fn() },
+  initLogger: jest.fn(),
 }));
 
 // ─── Imports ─────────────────────────────────────────────────────────────────

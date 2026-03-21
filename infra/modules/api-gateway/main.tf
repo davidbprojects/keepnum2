@@ -103,6 +103,8 @@ locals {
     "GET /admin/feature-flags/defaults"                      = { lambda_key = "admin-service", auth = true }
     "PUT /admin/feature-flags/defaults"                      = { lambda_key = "admin-service", auth = true }
     "GET /admin/audit-log"                                   = { lambda_key = "admin-service", auth = true }
+    "GET /admin/logs"                                        = { lambda_key = "admin-service", auth = true }
+    "GET /admin/logs/auth"                                   = { lambda_key = "admin-service", auth = true }
     "GET /admin/greetings"                                   = { lambda_key = "admin-service", auth = true }
     "POST /admin/greetings"                                  = { lambda_key = "admin-service", auth = true }
     "PUT /admin/greetings/{id}"                              = { lambda_key = "admin-service", auth = true }

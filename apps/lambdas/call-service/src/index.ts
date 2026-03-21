@@ -16,6 +16,7 @@ import {
 } from '@keepnum/shared';
 import type { CallDisposition, CallLogItem } from '@keepnum/shared';
 import type { CallerRuleAction } from '@keepnum/shared';
+import { logger, initLogger } from '@keepnum/shared';
 import { screenCall } from '@keepnum/call-screening-service';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -463,7 +464,7 @@ async function routeCall(
       }
       // Caller accepted — continue to forwarding/default
     } catch (err) {
-      console.error('Call screening error, routing to voicemail:', err);
+      logger.error('Call screening error, routing to voicemail', err);
       return { disposition: 'screened', action: 'voicemail' };
     }
   }
@@ -493,7 +494,7 @@ async function routeCall(
         forwardTo: forwardingRule.destination,
       };
     } catch (err) {
-      console.error('Call forwarding failed, routing to voicemail:', err);
+      logger.error('Call forwarding failed, routing to voicemail', err);
       // Req 3.4: if forwarded call cannot be connected, route to voicemail
       return { disposition: 'voicemail', action: 'voicemail' };
     }
@@ -563,7 +564,7 @@ export async function handler(
     // Look up the parked number
     const owner = await lookupParkedNumber(toNumber);
     if (!owner) {
-      console.warn(`No parked number found for ${toNumber}`);
+      logger.warn(`No parked number found for ${toNumber}`);
       return json(200, { message: 'Number not parked' });
     }
 
@@ -588,7 +589,7 @@ export async function handler(
       action: decision.action,
     });
   } catch (err) {
-    console.error('Call service error:', err);
+    logger.error('Call service error', err);
     return json(500, { error: 'Internal server error' });
   }
 }

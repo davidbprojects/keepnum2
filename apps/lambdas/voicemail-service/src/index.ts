@@ -15,6 +15,7 @@ import type {
   SetVoicemailSmsConfigRequest,
 } from '@keepnum/shared';
 import type { VoicemailFolder } from '@keepnum/shared';
+import { logger, initLogger } from '@keepnum/shared';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -316,7 +317,7 @@ async function handleVoicemailRecording(
   // Look up the parked number
   const owner = await lookupParkedNumber(toNumber);
   if (!owner) {
-    console.warn(`No parked number found for ${toNumber}`);
+    logger.warn(`No parked number found for ${toNumber}`);
     return json(200, { message: 'Number not parked' });
   }
 
@@ -354,7 +355,7 @@ async function handleVoicemailRecording(
     await triggerTranscription(recordingId, apiKey);
   } catch (err) {
     // Transcription trigger failed — mark as failed, still store audio (Req 5.5)
-    console.error('Failed to trigger transcription:', err);
+    logger.error('Failed to trigger transcription', err);
     await pool.query(
       `UPDATE voicemails SET transcription_status = 'failed' WHERE id = $1`,
       [voicemailId],
@@ -404,14 +405,14 @@ async function handleTranscriptionCompleted(
   );
 
   if (vmRows.length === 0) {
-    console.warn('No pending voicemail found for transcription event');
+    logger.warn('No pending voicemail found for transcription event');
     return json(200, { message: 'No pending voicemail found' });
   }
 
   const voicemail = vmRows[0];
   const owner = await lookupParkedNumberById(voicemail.parked_number_id);
   if (!owner) {
-    console.warn(`Owner not found for parked number ${voicemail.parked_number_id}`);
+    logger.warn(`Owner not found for parked number ${voicemail.parked_number_id}`);
     return json(200, { message: 'Owner not found' });
   }
 
@@ -1159,7 +1160,7 @@ export async function handler(
 
     return json(404, { error: 'Not found' });
   } catch (err) {
-    console.error('Voicemail service error:', err);
+    logger.error('Voicemail service error', err);
     return json(500, { error: 'Internal server error' });
   }
 }

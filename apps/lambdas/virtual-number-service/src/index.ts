@@ -2,6 +2,7 @@ import type { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
 import { SSMClient, GetParameterCommand } from '@aws-sdk/client-ssm';
 import { Pool } from 'pg';
 import { assertFlag, assertNumericLimit } from '@keepnum/shared';
+import { logger, initLogger } from '@keepnum/shared';
 
 // ─── Clients ─────────────────────────────────────────────────────────────────
 
@@ -157,7 +158,7 @@ async function handleRelease(dbUserId: string, id: string): Promise<APIGatewayPr
     return json(200, { message: 'Virtual number released' });
   } catch (err) {
     await client.query('ROLLBACK');
-    console.error('Release failed:', err);
+    logger.error('Release failed', err);
     return json(500, { error: 'Release failed' });
   } finally {
     client.release();
@@ -301,7 +302,7 @@ export async function handler(event: APIGatewayProxyEvent): Promise<APIGatewayPr
 
     return json(404, { error: 'Not found' });
   } catch (err) {
-    console.error('Unhandled error:', err);
+    logger.error('Unhandled error', err);
     return json(500, { error: 'Internal server error' });
   }
 }

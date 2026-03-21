@@ -41,6 +41,8 @@ jest.mock('@keepnum/shared', () => ({
   makeCallLogPk: mockMakeCallLogPk,
   makeCallLogSk: mockMakeCallLogSk,
   makeTtl: mockMakeTtl,
+  logger: { debug: jest.fn(), info: jest.fn(), warn: jest.fn(), error: jest.fn(), auth: jest.fn(), request: jest.fn() },
+  initLogger: jest.fn(),
 }));
 
 const mockScreenCall = jest.fn();

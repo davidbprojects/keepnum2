@@ -2,6 +2,7 @@ import type { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
 import { Pool } from 'pg';
 import { assertFlag } from '@keepnum/shared';
 import type { ScanStatus, FindingSeverity } from '@keepnum/shared';
+import { logger, initLogger } from '@keepnum/shared';
 
 const pool = new Pool({
   host: process.env.DB_HOST, database: process.env.DB_NAME,
@@ -164,7 +165,7 @@ export async function handler(event: APIGatewayProxyEvent): Promise<APIGatewayPr
 
     return json(404, { error: 'Not found' });
   } catch (err) {
-    console.error('Unhandled error:', err);
+    logger.error('Unhandled error', err);
     return json(500, { error: 'Internal server error' });
   }
 }

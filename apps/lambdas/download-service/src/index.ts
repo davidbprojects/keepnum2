@@ -2,6 +2,7 @@ import type { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
 import { SSMClient, GetParameterCommand } from '@aws-sdk/client-ssm';
 import { Pool } from 'pg';
 import { resolveFlag } from '@keepnum/shared';
+import { logger, initLogger } from '@keepnum/shared';
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -345,7 +346,7 @@ export async function handler(
 
     return json(404, { error: 'Not found' });
   } catch (err) {
-    console.error('Download service error:', err);
+    logger.error('Download service error', err);
     return json(500, { error: 'Internal server error' });
   }
 }

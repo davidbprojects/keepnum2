@@ -15,3 +15,7 @@ export * from './feature-flags';
 
 // Spam filter helper
 export * from './spam-filter';
+
+// Structured logger
+export { logger, initLogger } from './logger';
+export type { LogLevel } from './logger';

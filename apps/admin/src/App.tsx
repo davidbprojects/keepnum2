@@ -10,6 +10,7 @@ import PackagesPage from './pages/PackagesPage';
 import FeatureFlagsPage from './pages/FeatureFlagsPage';
 import AuditLogPage from './pages/AuditLogPage';
 import GreetingsPage from './pages/GreetingsPage';
+import LogsPage from './pages/LogsPage';
 
 const App: React.FC = () => (
   <AuthProvider>
@@ -26,6 +27,7 @@ const App: React.FC = () => (
           <Route path="/feature-flags" element={<FeatureFlagsPage />} />
           <Route path="/greetings" element={<GreetingsPage />} />
           <Route path="/audit-log" element={<AuditLogPage />} />
+          <Route path="/logs" element={<LogsPage />} />
         </Route>
       </Route>
     </Routes>
